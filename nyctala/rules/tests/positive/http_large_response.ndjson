@@ -1,0 +1,2 @@
+{"message": "198.51.100.20 - - [22/Oct/2026:10:00:00 +0200] \"GET /backup/db.sql.gz HTTP/1.1\" 200 2147483648 \"-\" \"Mozilla/5.0\"", "event.dataset": "nginx.access", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "198.51.100.20 - - [22/Oct/2026:10:00:00 +0200] \"GET /export HTTP/1.1\" 200 104857600 \"-\" \"Mozilla/5.0\"", "event.dataset": "nginx.access", "@timestamp": "2026-10-22T12:00:00Z"}

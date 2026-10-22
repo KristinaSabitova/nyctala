@@ -1,0 +1,27 @@
+title: Sudo to an interactive root shell
+id: d09d433d-4ea1-4d77-9f1a-1febf7776e5b
+status: test
+description: >
+  A user successfully ran a bare shell (or su) as root through sudo, which hands
+  them an unrestricted root session instead of a single audited command.
+author: sabitova
+date: 2026-10-22
+tags:
+  - attack.privilege-escalation
+  - attack.t1548.003
+logsource:
+  product: linux
+  service: sudo
+detection:
+  selection:
+    event.action: sudo_command
+    event.outcome: success
+    user.target.name: root
+  shell:
+    process.command_line|re: '^(/usr)?(/local)?/s?bin/(ba|da|z|k|c|tc|fi|a)?sh( -[a-z]+)*$'
+  su:
+    process.command_line|re: '^(/usr)?/bin/su( -| -l| root| - root)?$'
+  condition: selection and (shell or su)
+falsepositives:
+  - Administrators who routinely work from a root shell
+level: medium

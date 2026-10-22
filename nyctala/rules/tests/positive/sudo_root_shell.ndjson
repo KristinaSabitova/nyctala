@@ -1,0 +1,4 @@
+{"message": "Oct 22 10:00:01 vps-a sudo:     kris : TTY=pts/0 ; PWD=/home/kris ; USER=root ; COMMAND=/bin/bash", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "Oct 22 10:00:01 vps-a sudo:     kris : TTY=pts/0 ; PWD=/home/kris ; USER=root ; COMMAND=/usr/bin/zsh", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "Oct 22 10:00:01 vps-a sudo:     kris : TTY=pts/0 ; PWD=/home/kris ; USER=root ; COMMAND=/bin/sh -i", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "Oct 22 10:00:01 vps-a sudo:     kris : TTY=pts/0 ; PWD=/home/kris ; USER=root ; COMMAND=/usr/bin/su -", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}

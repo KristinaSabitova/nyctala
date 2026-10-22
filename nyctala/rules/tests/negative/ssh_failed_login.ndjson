@@ -1,0 +1,6 @@
+{"message": "Oct 22 10:00:01 vps-a sshd[3]: Accepted password for root from 203.0.113.7 port 52110 ssh2", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "Oct 22 10:00:01 vps-a sshd[3]: Accepted publickey for kris from 198.51.100.20 port 40022 ssh2: ED25519 SHA256:AbCd", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "Oct 22 10:00:01 vps-a sshd[4]: Invalid user oracle from 192.0.2.50 port 41000", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "Oct 22 10:00:01 vps-a sudo:  mallory : 3 incorrect password attempts ; TTY=pts/1 ; PWD=/tmp ; USER=root ; COMMAND=/usr/bin/id", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "Oct 22 10:00:01 vps-a sshd[5]: Connection closed by authenticating user root 203.0.113.7 port 52120 [preauth]", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "203.0.113.7 - - [22/Oct/2026:10:00:00 +0200] \"POST /login HTTP/1.1\" 401 64 \"-\" \"Mozilla/5.0\"", "event.dataset": "nginx.access", "@timestamp": "2026-10-22T12:00:00Z"}

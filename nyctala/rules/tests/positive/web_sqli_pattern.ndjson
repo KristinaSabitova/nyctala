@@ -1,0 +1,6 @@
+{"message": "203.0.113.7 - - [22/Oct/2026:10:00:00 +0200] \"GET /products?id=1%27%20OR%20%271%27=%271 HTTP/1.1\" 500 512 \"-\" \"Mozilla/5.0\"", "event.dataset": "nginx.access", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "203.0.113.7 - - [22/Oct/2026:10:00:00 +0200] \"GET /products?id=1'+or+1=1--+- HTTP/1.1\" 500 512 \"-\" \"Mozilla/5.0\"", "event.dataset": "nginx.access", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "203.0.113.7 - - [22/Oct/2026:10:00:00 +0200] \"GET /item?id=-1+UNION+ALL+SELECT+1,2,3 HTTP/1.1\" 200 512 \"-\" \"Mozilla/5.0\"", "event.dataset": "nginx.access", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "203.0.113.7 - - [22/Oct/2026:10:00:00 +0200] \"GET /item?id=1%20union/**/select%20null HTTP/1.1\" 200 512 \"-\" \"Mozilla/5.0\"", "event.dataset": "nginx.access", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "203.0.113.7 - - [22/Oct/2026:10:00:00 +0200] \"GET /item?id=1%20AND%20SLEEP%285%29 HTTP/1.1\" 200 512 \"-\" \"Mozilla/5.0\"", "event.dataset": "nginx.access", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "203.0.113.7 - - [22/Oct/2026:10:00:00 +0200] \"GET /q?x=1+and+1=(select+1+from+information_schema.tables) HTTP/1.1\" 200 512 \"-\" \"Mozilla/5.0\"", "event.dataset": "nginx.access", "@timestamp": "2026-10-22T12:00:00Z"}

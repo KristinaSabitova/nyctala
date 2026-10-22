@@ -1,0 +1,20 @@
+title: Unusually large HTTP response
+id: d54bd000-c7d4-4de4-aeec-afb9247f8c09
+status: test
+description: >
+  A single HTTP response of 100 MiB or more, e.g. a database dump or backup
+  being downloaded. Static threshold until per-route baselines exist.
+author: sabitova
+date: 2026-10-22
+tags:
+  - attack.exfiltration
+  - attack.t1041
+logsource:
+  category: webserver
+detection:
+  selection:
+    http.response.bytes|gte: 104857600
+  condition: selection
+falsepositives:
+  - Legitimate large downloads (ISOs, media)
+level: medium

@@ -1,0 +1,25 @@
+title: Crontab modified
+id: 09c32e06-168e-4191-8cbe-3e1d239f3398
+status: test
+description: >
+  A user's crontab was replaced or deleted with the crontab command. Scheduled
+  tasks are a common persistence mechanism.
+author: sabitova
+date: 2026-10-22
+tags:
+  - attack.persistence
+  - attack.execution
+  - attack.t1053.003
+logsource:
+  product: linux
+  service: cron
+detection:
+  selection:
+    process.name: crontab
+    event.action:
+      - crontab_replace
+      - crontab_delete
+  condition: selection
+falsepositives:
+  - Legitimate administration of scheduled jobs
+level: medium

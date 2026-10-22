@@ -1,0 +1,4 @@
+{"message": "Oct 22 10:00:01 vps-a sshd[1]: Failed password for root from 203.0.113.7 port 52100 ssh2", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "Oct 22 10:00:01 vps-a sshd[1]: Failed password for invalid user admin from 203.0.113.7 port 52102 ssh2", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "Oct 22 10:00:01 vps-a sshd-session[2]: Failed publickey for kris from 198.51.100.20 port 40000 ssh2: ED25519 SHA256:AbCd", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "Oct 22 10:00:01 vps-a sshd[1]: message repeated 2 times: [ Failed password for root from 203.0.113.7 port 52104 ssh2]", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}

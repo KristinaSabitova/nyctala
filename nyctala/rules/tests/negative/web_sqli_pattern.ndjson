@@ -1,0 +1,7 @@
+{"message": "198.51.100.20 - - [22/Oct/2026:10:00:00 +0200] \"GET /search?q=union+station HTTP/1.1\" 200 512 \"-\" \"Mozilla/5.0\"", "event.dataset": "nginx.access", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "198.51.100.20 - - [22/Oct/2026:10:00:00 +0200] \"GET /users?name=O%27Brien HTTP/1.1\" 200 512 \"-\" \"Mozilla/5.0\"", "event.dataset": "nginx.access", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "198.51.100.20 - - [22/Oct/2026:10:00:00 +0200] \"GET /search?q=rock+and+roll HTTP/1.1\" 200 512 \"-\" \"Mozilla/5.0\"", "event.dataset": "nginx.access", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "198.51.100.20 - - [22/Oct/2026:10:00:00 +0200] \"GET /search?q=select+a+plan&sort=created_at HTTP/1.1\" 200 512 \"-\" \"Mozilla/5.0\"", "event.dataset": "nginx.access", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "198.51.100.20 - - [22/Oct/2026:10:00:00 +0200] \"GET /products?id=42 HTTP/1.1\" 200 512 \"-\" \"Mozilla/5.0\"", "event.dataset": "nginx.access", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "198.51.100.20 - - [22/Oct/2026:10:00:00 +0200] \"GET /sleep-tips HTTP/1.1\" 200 512 \"-\" \"Mozilla/5.0\"", "event.dataset": "nginx.access", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "198.51.100.20 - - [22/Oct/2026:10:00:00 +0200] \"GET /docs/information_schema.html HTTP/1.1\" 200 512 \"-\" \"Mozilla/5.0\"", "event.dataset": "nginx.access", "@timestamp": "2026-10-22T12:00:00Z"}

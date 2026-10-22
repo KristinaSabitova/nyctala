@@ -1,0 +1,7 @@
+{"message": "Oct 22 10:00:01 vps-a sudo:     kris : TTY=pts/0 ; PWD=/home/kris ; USER=root ; COMMAND=/usr/bin/apt update", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "Oct 22 10:00:01 vps-a sudo:     kris : TTY=pts/0 ; PWD=/home/kris ; USER=root ; COMMAND=/bin/bash -c /opt/backup.sh", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "Oct 22 10:00:01 vps-a sudo:     kris : TTY=pts/0 ; PWD=/home/kris ; USER=www-data ; COMMAND=/bin/bash", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "Oct 22 10:00:01 vps-a sudo:  mallory : 3 incorrect password attempts ; TTY=pts/1 ; PWD=/tmp ; USER=root ; COMMAND=/bin/bash", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "Oct 22 10:00:01 vps-a sudo:  mallory : user NOT in sudoers ; TTY=pts/1 ; PWD=/tmp ; USER=root ; COMMAND=/bin/bash", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "Oct 22 10:00:01 vps-a sudo:     kris : TTY=pts/0 ; PWD=/home/kris ; USER=root ; COMMAND=/usr/bin/vim /etc/bash.bashrc", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "Oct 22 10:00:01 vps-a su[9]: (to root) kris on pts/0", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}

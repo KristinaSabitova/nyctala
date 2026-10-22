@@ -1,0 +1,27 @@
+title: SQL injection pattern in URL query
+id: be3f5749-d444-4868-9370-732ce9cb4e9d
+status: test
+description: >
+  The query string carries a typical SQL injection payload, raw or URL-encoded:
+  a quote followed by OR/AND, UNION SELECT, time-based functions or
+  information_schema. Building block for the repeated-SQLi correlation.
+author: sabitova
+date: 2026-10-22
+tags:
+  - attack.initial-access
+  - attack.t1190
+logsource:
+  category: webserver
+detection:
+  quote_bool:
+    url.query|re|i: "('|%27)(\\s|\\+|%20)*(or|and)(\\s|\\+|%20)"
+  union:
+    url.query|re|i: 'union(\s|\+|%20|/\*\*/)+(all(\s|\+|%20)+)?select'
+  timing:
+    url.query|re|i: '(sleep|benchmark|pg_sleep)(\(|%28)'
+  schema:
+    url.query|contains: information_schema
+  condition: 1 of them
+falsepositives:
+  - Search forms where users type SQL on purpose
+level: medium

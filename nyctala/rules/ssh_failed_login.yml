@@ -1,0 +1,22 @@
+title: SSH failed login
+id: 9b684430-7681-4f78-b4d6-020e84cf2727
+status: test
+description: >
+  A failed SSH authentication (password, publickey or keyboard-interactive),
+  for an existing or an invalid user. Building block for brute-force correlation.
+author: sabitova
+date: 2026-10-22
+tags:
+  - attack.credential-access
+  - attack.t1110.001
+logsource:
+  product: linux
+  service: auth
+detection:
+  selection:
+    event.action: ssh_login
+    event.outcome: failure
+  condition: selection
+falsepositives:
+  - Users mistyping their password
+level: low
