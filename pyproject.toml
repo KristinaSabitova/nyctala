@@ -9,8 +9,11 @@ authors = [{ name = "sabitova" }]
 requires-python = ">=3.12"
 dependencies = [
     "duckdb>=2.0",
+    "fastapi>=0.160",
     "pyarrow>=26.0",
     "pydantic>=2.14",
+    "typer>=0.27",
+    "uvicorn>=0.54",
 ]
 classifiers = [
     "Development Status :: 1 - Planning",
@@ -30,6 +33,7 @@ module-root = ""
 
 [dependency-groups]
 dev = [
+    "httpx2>=2.16",
     "mypy>=1.18",
     "pytest>=8.4",
     "ruff>=0.14",
@@ -43,7 +47,7 @@ target-version = "py312"
 select = ["E", "W", "F", "I", "B", "UP", "S", "SIM", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101"]
+"tests/**" = ["S101", "S105", "S106"]
 
 [tool.mypy]
 python_version = "3.12"
