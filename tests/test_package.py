@@ -4,7 +4,7 @@ import pytest
 
 import nyctala
 
-SUBPACKAGES = ["ingest", "parsers", "schema", "engine", "coverage", "lab", "health", "cli"]
+SUBPACKAGES = ["ingest", "parsers", "schema", "store", "engine", "coverage", "lab", "health", "cli"]
 
 
 def test_version() -> None:
