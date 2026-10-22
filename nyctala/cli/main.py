@@ -1,5 +1,6 @@
 """nyctala command line."""
 
+import json
 import os
 from pathlib import Path
 from typing import Annotated
@@ -11,6 +12,8 @@ from nyctala.ingest.sensors import SensorError, SensorRegistry
 app = typer.Typer(no_args_is_help=True, help="Lightweight detection-engineering SIEM.")
 sensor_app = typer.Typer(no_args_is_help=True, help="Manage sensors and their ingest tokens.")
 app.add_typer(sensor_app, name="sensor")
+rules_app = typer.Typer(no_args_is_help=True, help="Detection rules.")
+app.add_typer(rules_app, name="rules")
 
 DataDir = Annotated[
     Path,
@@ -49,6 +52,53 @@ def sensor_list(data: DataDir = Path("data")) -> None:
     for sensor_id, info in sorted(_registry(data).list().items()):
         status = "revoked" if info.get("revoked") else "active"
         typer.echo(f"{sensor_id}\t{status}\t{info.get('created', '')}")
+
+
+@rules_app.command("test")
+def rules_test(
+    rules_dir: Annotated[
+        Path | None, typer.Argument(help="Rules directory (default: bundled rules).")
+    ] = None,
+    as_json: Annotated[bool, typer.Option("--json", help="Machine-readable output.")] = False,
+) -> None:
+    """Run every rule against its positive and negative fixtures. Exit 1 on any failure."""
+    from nyctala.engine.testing import RULES_DIR, run_rule_tests
+
+    results = run_rule_tests(rules_dir or RULES_DIR)
+    failed = [r for r in results if not r.passed]
+    if as_json:
+        report = [
+            {
+                "rule": r.name,
+                "id": r.rule.id if r.rule else None,
+                "techniques": list(r.rule.techniques) if r.rule else [],
+                "passed": r.passed,
+                "positive": {"total": r.positive_total, "matched": r.positive_matched},
+                "negative": {"total": r.negative_total, "matched": r.negative_matched},
+                "errors": r.errors,
+            }
+            for r in results
+        ]
+        typer.echo(json.dumps(report, indent=2))
+    else:
+        for r in results:
+            mark = "PASS" if r.passed else "FAIL"
+            techniques = ",".join(r.rule.techniques) if r.rule else "-"
+            typer.echo(
+                f"{mark}  {r.name:<28} {techniques:<12} "
+                f"positive {r.positive_matched}/{r.positive_total}  "
+                f"negative {r.negative_matched}/{r.negative_total}"
+            )
+            for error in r.errors:
+                typer.echo(f"      error: {error}")
+            if r.rule and r.negative_matched:
+                typer.echo(f"      false positives: {r.negative_matched} negative event(s) matched")
+            if r.rule and r.positive_matched < r.positive_total:
+                missed = r.positive_total - r.positive_matched
+                typer.echo(f"      false negatives: {missed} positive event(s) not matched")
+        typer.echo(f"\n{len(results) - len(failed)}/{len(results)} rules passed")
+    if not results or failed:
+        raise typer.Exit(1)
 
 
 @app.command()
