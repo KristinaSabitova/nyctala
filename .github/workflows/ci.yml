@@ -25,3 +25,22 @@ jobs:
       - run: uv run nyctala rules test
       - run: uv run nyctala lab run
       - run: uv build
+
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: shellcheck
+        run: shellcheck -x deploy/deploy.sh deploy/hardening/*.sh deploy/offsite/*.sh deploy/sensor/*.sh
+      - name: compose config
+        run: cd deploy && docker compose config --quiet
+      - name: build image
+        run: docker build -f deploy/Dockerfile -t nyctala:ci .
+      - name: image runs unprivileged and offline-capable
+        run: |
+          test "$(docker run --rm --entrypoint id nyctala:ci -u)" = "10001"
+          docker run --rm --network none --read-only nyctala:ci rules test
+          docker run --rm --network none --read-only --tmpfs /tmp nyctala:ci lab run

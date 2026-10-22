@@ -9,6 +9,10 @@ Lightweight SIEM focused on detection engineering:
 
 > Status: early development (pre-MVP). Nothing usable yet.
 
+## Deployment
+
+See [deploy/README.md](deploy/README.md): a dedicated, hardened VPS; sensors push logs over WireGuard.
+
 ## License
 
 MIT
