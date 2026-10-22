@@ -109,6 +109,54 @@ def rules_test(
 
 
 @app.command()
+def detect(
+    data: DataDir = Path("data"),
+    rules_dir: Annotated[
+        Path | None, typer.Option("--rules", help="Rules directory (default: bundled rules).")
+    ] = None,
+    interval: Annotated[float, typer.Option(help="Seconds between runs.", min=1)] = 10.0,
+    once: Annotated[bool, typer.Option("--once", help="Run a single pass and exit.")] = False,
+) -> None:
+    """Run the detection job and print new hits as NDJSON."""
+    import threading
+
+    from nyctala.engine.correlation import Hit
+    from nyctala.engine.job import DetectionJob
+    from nyctala.engine.ruleset import load_ruleset
+    from nyctala.engine.testing import RULES_DIR
+    from nyctala.store import EventStore
+
+    ruleset = load_ruleset(rules_dir or RULES_DIR)
+    for path, error in ruleset.errors.items():
+        typer.echo(f"skipping {path.name}: {error}", err=True)
+
+    def emit(hits: list[Hit]) -> None:
+        for hit in hits:
+            rule = ruleset.rules[hit.rule_id]
+            record = {
+                "rule.id": rule.id,
+                "rule.title": rule.title,
+                "rule.level": rule.level,
+                "techniques": list(rule.techniques),
+                "first": hit.first.isoformat(),
+                "last": hit.last.isoformat(),
+                "group": hit.fields,
+                "event_ids": list(hit.event_ids),
+            }
+            typer.echo(json.dumps(record, default=str))
+
+    job = DetectionJob(EventStore(data), ruleset, emit, interval=interval)
+    if once:
+        job.run_once()
+        return
+    stop = threading.Event()
+    try:
+        job.run_forever(stop)
+    except KeyboardInterrupt:
+        stop.set()
+
+
+@app.command()
 def serve(
     data: DataDir = Path("data"),
     host: Annotated[str, typer.Option(help="Bind address (use the WireGuard IP).")] = "127.0.0.1",
