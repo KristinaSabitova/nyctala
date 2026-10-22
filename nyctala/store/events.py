@@ -4,6 +4,7 @@ Layout::
 
     <root>/events/dt=YYYY-MM-DD/part-<uuid>.parquet   (day of ingestion)
     <root>/alerts/dt=YYYY-MM-DD/part-<uuid>.parquet   (day the alert was raised)
+    <root>/rule_tests/dt=YYYY-MM-DD/part-<uuid>.parquet  (day of the test run)
 
 Both tables are append-only: files are added, never rewritten.
 
@@ -86,7 +87,26 @@ ALERT_SCHEMA = pa.schema(
     ]
 )
 
-TABLES = {"events": EVENT_SCHEMA, "alerts": ALERT_SCHEMA}
+RULE_TEST_SCHEMA = pa.schema(
+    [
+        ("run.id", pa.string()),
+        ("run.at", _TS),
+        ("rule.id", pa.string()),
+        ("rule.name", pa.string()),
+        ("rule.title", pa.string()),
+        ("rule.kind", pa.string()),
+        ("rule.digest", pa.string()),
+        ("threat.technique.id", pa.list_(pa.string())),
+        ("test.passed", pa.bool_()),
+        ("test.positive_total", pa.int32()),
+        ("test.positive_matched", pa.int32()),
+        ("test.negative_total", pa.int32()),
+        ("test.negative_matched", pa.int32()),
+        ("test.errors", pa.list_(pa.string())),
+    ]
+)
+
+TABLES = {"events": EVENT_SCHEMA, "alerts": ALERT_SCHEMA, "rule_tests": RULE_TEST_SCHEMA}
 PARTITION_COLUMN = "dt"
 
 
@@ -153,6 +173,10 @@ class EventStore:
         """Write ``alerts`` as one new Parquet file per day of creation."""
         return self._append("alerts", ((a.created, a.to_record()) for a in alerts))
 
+    def append_rule_tests(self, run_at: datetime, records: Iterable[dict[str, Any]]) -> int:
+        """Write the results of one ``rules test`` run."""
+        return self._append("rule_tests", ((run_at, r) for r in records))
+
     def _append(self, table: str, rows: Iterable[tuple[datetime, dict[str, Any]]]) -> int:
         by_day: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for when, record in rows:
@@ -186,7 +210,7 @@ class EventStore:
             self._con.execute(f"CREATE OR REPLACE TEMP VIEW {table} AS SELECT * FROM {source}")  # noqa: S608
 
     def query(self, sql: str, params: Sequence[Any] | None = None) -> list[dict[str, Any]]:
-        """Run one read-only ``SELECT`` against the ``events`` and ``alerts`` views.
+        """Run one read-only ``SELECT`` against the ``events``, ``alerts`` and ``rule_tests`` views.
 
         Values must go through ``params``; the statement text is never built
         from event content.

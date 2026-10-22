@@ -66,11 +66,23 @@ def rules_test(
         Path | None, typer.Argument(help="Rules directory (default: bundled rules).")
     ] = None,
     as_json: Annotated[bool, typer.Option("--json", help="Machine-readable output.")] = False,
+    record: Annotated[
+        Path | None,
+        typer.Option(
+            "--record", help="Also store the results in this data directory.", file_okay=False
+        ),
+    ] = None,
 ) -> None:
     """Run every rule against its positive and negative fixtures. Exit 1 on any failure."""
-    from nyctala.engine.testing import RULES_DIR, run_rule_tests
+    from nyctala.engine.testing import RULES_DIR, result_records, run_rule_tests
 
     results = run_rule_tests(rules_dir or RULES_DIR)
+    if record is not None:
+        from datetime import UTC, datetime
+
+        from nyctala.store import EventStore
+
+        EventStore(record).append_rule_tests(datetime.now(UTC), result_records(results))
     failed = [r for r in results if not r.passed]
     if as_json:
         report = [

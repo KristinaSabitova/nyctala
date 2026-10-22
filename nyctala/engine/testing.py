@@ -16,9 +16,13 @@ through the same parsing and validation as live data.
 Every rule must also compile and carry an ATT&CK technique tag.
 """
 
+import hashlib
 import tempfile
+import uuid
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from nyctala.engine.correlation import Correlation
 from nyctala.engine.ruleset import AnyRule, RuleSet, fetch_hits, load_ruleset
@@ -30,9 +34,25 @@ RULES_DIR = Path(__file__).resolve().parent.parent / "rules"
 FIXTURE_SENSOR = "rule-test"
 
 
+def rule_digest(path: Path) -> str:
+    """SHA-256 over a rule file and its fixtures: what a test result vouches for."""
+    digest = hashlib.sha256()
+    tests = path.parent / "tests"
+    for part in (
+        path,
+        tests / "positive" / f"{path.stem}.ndjson",
+        tests / "negative" / f"{path.stem}.ndjson",
+    ):
+        digest.update(part.name.encode() + b"\0")
+        digest.update(part.read_bytes() if part.is_file() else b"<missing>")
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
 @dataclass
 class RuleTestResult:
     name: str
+    digest: str = ""
     rule: AnyRule | None = None
     positive_total: int = 0
     positive_matched: int = 0
@@ -92,7 +112,7 @@ def run_rule_tests(rules_dir: Path = RULES_DIR) -> list[RuleTestResult]:
     ruleset = load_ruleset(rules_dir)
     results = []
     for path in sorted(rules_dir.glob("*.yml")):
-        result = RuleTestResult(path.stem)
+        result = RuleTestResult(path.stem, rule_digest(path))
         results.append(result)
         if path in ruleset.errors:
             result.errors.append(ruleset.errors[path])
@@ -119,3 +139,32 @@ def run_rule_tests(rules_dir: Path = RULES_DIR) -> list[RuleTestResult]:
             else:
                 result.negative_total, result.negative_matched = len(events), matched
     return results
+
+
+def result_records(
+    results: list[RuleTestResult], run_id: str | None = None
+) -> list[dict[str, Any]]:
+    """Rows for the ``rule_tests`` table."""
+    run_id = run_id or str(uuid.uuid4())
+    now = datetime.now(UTC)
+    return [
+        {
+            "run.id": run_id,
+            "run.at": now,
+            "rule.id": r.rule.id if r.rule else None,
+            "rule.name": r.name,
+            "rule.title": r.rule.title if r.rule else None,
+            "rule.kind": None
+            if r.rule is None
+            else ("correlation" if r.is_correlation else "detection"),
+            "rule.digest": r.digest,
+            "threat.technique.id": list(r.rule.techniques) if r.rule else [],
+            "test.passed": r.passed,
+            "test.positive_total": r.positive_total,
+            "test.positive_matched": r.positive_matched,
+            "test.negative_total": r.negative_total,
+            "test.negative_matched": r.negative_matched,
+            "test.errors": r.errors,
+        }
+        for r in results
+    ]
