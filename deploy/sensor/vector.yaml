@@ -1,0 +1,69 @@
+# Vector on a sensor: ship auth logs (from journald) and nginx access logs to nyctala.
+# Installed as /etc/vector/nyctala.yaml; the token comes from NYCTALA_TOKEN in
+# /etc/default/vector (root, 0600), never from this file.
+
+data_dir: /var/lib/vector
+
+sources:
+  auth_journal:
+    type: journald
+    current_boot_only: false
+    include_matches:
+      SYSLOG_IDENTIFIER: [sshd, sshd-session, sudo, su, crontab, CRON, cron]
+
+  nginx_access:
+    type: file
+    include: [/var/log/nginx/access.log]
+    read_from: end
+
+transforms:
+  auth_lines:
+    type: remap
+    inputs: [auth_journal]
+    # Rebuild a syslog line with an RFC 3339 header, as nyctala's auth_log parser expects.
+    source: |
+      ts = format_timestamp!(.timestamp, format: "%Y-%m-%dT%H:%M:%S%.6f%:z", timezone: "UTC")
+      prog = to_string(.SYSLOG_IDENTIFIER) ?? "unknown"
+      pid = to_string(._PID) ?? (to_string(.SYSLOG_PID) ?? "")
+      host = to_string(.host) ?? "unknown"
+      tag = if pid != "" { prog + "[" + pid + "]" } else { prog }
+      msg = to_string(.message) ?? ""
+      . = {"message": ts + " " + host + " " + tag + ": " + msg, "event.dataset": "auth_log"}
+
+  nginx_lines:
+    type: remap
+    inputs: [nginx_access]
+    source: |
+      . = {
+        "message": to_string(.message) ?? "",
+        "event.dataset": "nginx.access",
+        "host.name": get_hostname() ?? "unknown"
+      }
+
+sinks:
+  nyctala:
+    type: http
+    inputs: [auth_lines, nginx_lines]
+    # nyctala's WireGuard address: the only route to the SIEM.
+    uri: http://10.66.0.1:8514/v1/ingest
+    method: post
+    encoding:
+      codec: json
+    framing:
+      method: newline_delimited
+    request:
+      headers:
+        content-type: application/x-ndjson
+    auth:
+      strategy: bearer
+      token: "${NYCTALA_TOKEN}"
+    # Below nyctala's 1 MiB request limit.
+    batch:
+      max_bytes: 524288
+      timeout_secs: 5
+    compression: none
+    # Keep events on disk while the SIEM is unreachable.
+    buffer:
+      type: disk
+      max_size: 268435488
+      when_full: block
