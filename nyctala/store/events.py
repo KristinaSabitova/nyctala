@@ -38,6 +38,7 @@ EVENT_SCHEMA = pa.schema(
         ("host.name", pa.string()),
         ("sensor.id", pa.string()),
         ("user.name", pa.string()),
+        ("user.target.name", pa.string()),
         ("source.ip", pa.string()),
         ("destination.ip", pa.string()),
         ("process.name", pa.string()),

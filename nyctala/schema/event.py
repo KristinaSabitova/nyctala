@@ -73,6 +73,7 @@ class Event(BaseModel):
     sensor_id: Identifier = Field(alias="sensor.id")
 
     user_name: str | None = _text("user.name")
+    user_target_name: str | None = _text("user.target.name")
     source_ip: IP | None = Field(default=None, alias="source.ip")
     destination_ip: IP | None = Field(default=None, alias="destination.ip")
 
