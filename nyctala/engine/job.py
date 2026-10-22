@@ -4,9 +4,11 @@ Every ``interval`` seconds the alerting rules are evaluated over a sliding
 window of event time: the longest correlation chain plus an allowance for
 ingestion lag. Consecutive runs see overlapping windows, so a hit is reported
 only if it shares no event with a hit already reported for the same rule and
-group: the same evidence never alerts twice.
+group: the same evidence never alerts twice. That memory is rebuilt from the
+stored alerts on start, so a restart does not repeat alerts either.
 """
 
+import json
 import logging
 import threading
 from collections.abc import Callable
@@ -42,6 +44,17 @@ class DetectionJob:
     lag: timedelta = timedelta(minutes=5)
     clock: Callable[[], datetime] = _now
     _reported: dict[tuple[str, tuple[Any, ...]], list[_Reported]] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        since = self.clock() - 2 * self.window
+        rows = self.store.query(
+            'SELECT "rule.id" AS rule, "alert.group" AS grp, "alert.event_ids" AS ids, '
+            '"alert.last" AS last FROM alerts WHERE "alert.kind" != \'risk\' AND "alert.last" >= ?',
+            [since],
+        )
+        for row in rows:
+            key = (row["rule"], tuple(sorted(json.loads(row["grp"]).items())))
+            self._reported.setdefault(key, []).append(_Reported(set(row["ids"]), row["last"]))
 
     @property
     def window(self) -> timedelta:
