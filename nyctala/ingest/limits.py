@@ -11,6 +11,8 @@ class Limits:
     max_body_bytes: int = 1 << 20
     max_line_bytes: int = 128 << 10
     max_lines: int = 5_000
+    # One raw line can unfold into several events (syslog "message repeated").
+    max_events: int = 20_000
     # Requests per second (sustained) and burst, per sensor.
     sensor_rate: float = 10.0
     sensor_burst: int = 20

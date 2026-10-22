@@ -198,3 +198,61 @@ def test_hostile_content_stored_neutralised(env: Env) -> None:
 def test_no_api_docs_exposed(env: Env) -> None:
     for path in ("/docs", "/redoc", "/openapi.json"):
         assert env.client.get(path).status_code == 404
+
+
+# --- raw log lines -----------------------------------------------------------------
+
+SSH_FAIL = "Oct 22 10:00:01 vps-a sshd[1]: Failed password for root from 203.0.113.7 port 1 ssh2"
+NGINX = '203.0.113.7 - - [22/Oct/2026:10:00:00 +0200] "GET /?id=1 HTTP/1.1" 200 5 "-" "curl/8"'
+
+
+def raw(message: str, dataset: str = "auth_log", **fields: Any) -> str:
+    return json.dumps({"message": message, "event.dataset": dataset, **fields})
+
+
+def test_raw_lines_are_parsed(env: Env) -> None:
+    body = "\n".join(
+        [
+            raw(SSH_FAIL, **{"@timestamp": "2026-10-22T12:00:00Z"}),
+            raw(NGINX, "nginx.access", **{"host.name": "web1"}),
+        ]
+    )
+    assert env.post(body).json() == {"accepted": 2, "rejected": 0, "errors": []}
+    rows = env.store.query(
+        'SELECT "event.dataset" AS d, "host.name" AS h, "source.ip" AS ip, "sensor.id" AS s '
+        "FROM events ORDER BY d"
+    )
+    assert rows == [
+        {"d": "auth_log", "h": "vps-a", "ip": "203.0.113.7", "s": "vps-a"},
+        {"d": "nginx.access", "h": "web1", "ip": "203.0.113.7", "s": "vps-a"},
+    ]
+
+
+def test_raw_repeated_line_unfolds(env: Env) -> None:
+    line = SSH_FAIL.replace(": Failed", ": message repeated 5 times: [ Failed") + "]"
+    assert env.post(raw(line)).json()["accepted"] == 5
+
+
+def test_event_limit_per_request(tmp_path: Path) -> None:
+    env = Env(tmp_path, Limits(max_events=7))
+    line = SSH_FAIL.replace(": Failed", ": message repeated 5 times: [ Failed") + "]"
+    body = env.post("\n".join([raw(line), raw(line)])).json()
+    assert body["accepted"] == 5
+    assert body["errors"] == [{"line": 2, "error": "event limit per request reached"}]
+
+
+@pytest.mark.parametrize(
+    ("line", "error"),
+    [
+        (raw(SSH_FAIL, "windows"), "unknown dataset"),
+        (raw(SSH_FAIL, ["auth_log"]), "unknown dataset"),  # type: ignore[arg-type]
+        (json.dumps({"message": 1, "event.dataset": "auth_log"}), "message must be a string"),
+        (raw(SSH_FAIL, **{"user.name": "root"}), "unknown field"),
+        (raw(SSH_FAIL, **{"sensor.id": "vps-b"}), "server-controlled field"),
+        (raw(SSH_FAIL, **{"@timestamp": "yesterday"}), "@timestamp"),
+    ],
+)
+def test_bad_raw_lines(env: Env, line: str, error: str) -> None:
+    body = env.post(line).json()
+    assert body["accepted"] == 0
+    assert body["errors"][0]["error"].startswith(error)
