@@ -127,6 +127,79 @@ def rules_test(
 
 
 @app.command()
+def coverage(
+    data: Annotated[
+        Path | None,
+        typer.Option(
+            "--data",
+            envvar="NYCTALA_DATA",
+            file_okay=False,
+            help="Use the latest test run recorded in this data directory instead of testing now.",
+        ),
+    ] = None,
+    rules_dir: Annotated[
+        Path | None, typer.Option("--rules", help="Rules directory (default: bundled rules).")
+    ] = None,
+    fmt: Annotated[str, typer.Option("--format", help="text, json or navigator.")] = "text",
+) -> None:
+    """ATT&CK coverage measured from rule tests: only rules with passing tests count."""
+    from nyctala.coverage.matrix import RuleRecord, current_digests, load_attack, measure
+    from nyctala.engine.testing import RULES_DIR, run_rule_tests
+
+    directory = rules_dir or RULES_DIR
+    if fmt not in ("text", "json", "navigator"):
+        raise typer.BadParameter("format must be text, json or navigator")
+    if data is None:
+        source = "rule tests run now"
+        records = [
+            RuleRecord(r.name, r.rule.techniques if r.rule else (), r.passed, r.digest)
+            for r in run_rule_tests(directory)
+        ]
+        cov = measure(records)
+    else:
+        from nyctala.store import EventStore
+
+        rows = EventStore(data).query(
+            'SELECT * FROM rule_tests WHERE "run.id" = '
+            '(SELECT "run.id" FROM rule_tests ORDER BY "run.at" DESC LIMIT 1)'
+        )
+        if not rows:
+            raise typer.BadParameter("no recorded rule test run; use `rules test --record`")
+        source = f"recorded run {rows[0]['run.id'][:8]} at {rows[0]['run.at']:%Y-%m-%d %H:%M} UTC"
+        records = [
+            RuleRecord(
+                r["rule.name"], tuple(r["threat.technique.id"]), r["test.passed"], r["rule.digest"]
+            )
+            for r in rows
+        ]
+        cov = measure(records, current_digests(directory))
+
+    if fmt == "json":
+        typer.echo(json.dumps(cov.to_json(), indent=2))
+        return
+    if fmt == "navigator":
+        typer.echo(json.dumps(cov.to_navigator(), indent=2))
+        return
+
+    attack = load_attack()
+    typer.echo(f"ATT&CK Enterprise v{attack.version}, Linux - measured from {source}")
+    typer.echo(f"rules passing: {cov.rules_passed}/{cov.rules_total}\n")
+    for tactic, total, covered in cov.by_tactic():
+        if not total:
+            continue  # tactics without Linux techniques (PRE platform)
+        bar = "#" * len(covered) + "." * min(total - len(covered), 30 - len(covered))
+        typer.echo(f"{tactic['name']:<22} {len(covered):>2}/{total:<3} {bar}")
+        for tid in covered:
+            name = attack.techniques[tid]["name"]
+            typer.echo(f"    {tid:<10} {name:<36} {', '.join(cov.covered[tid])}")
+    typer.echo(f"\ncovered: {len(cov.covered)} of {len(attack.techniques)} Linux techniques")
+    for label, bucket in (("failing", cov.failing), ("stale", cov.stale), ("unknown", cov.unknown)):
+        for tid, rules in sorted(bucket.items()):
+            typer.echo(f"not counted ({label}): {tid}  {', '.join(rules)}")
+    typer.echo(f"\n{attack.notice}")
+
+
+@app.command()
 def detect(
     data: DataDir = Path("data"),
     rules_dir: Annotated[
