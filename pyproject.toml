@@ -21,6 +21,9 @@ classifiers = [
     "Topic :: Security",
 ]
 
+[project.scripts]
+nyctala = "nyctala.cli.main:app"
+
 [project.urls]
 Repository = "https://github.com/KristinaSabitova/nyctala"
 
