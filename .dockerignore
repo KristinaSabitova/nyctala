@@ -1,0 +1,8 @@
+*
+!pyproject.toml
+!uv.lock
+!README.md
+!LICENSE
+!nyctala/
+**/__pycache__
+**/*.pyc

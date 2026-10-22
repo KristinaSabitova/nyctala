@@ -1,0 +1,61 @@
+# nyctala on its dedicated VPS.
+#
+#   ingest  receives NDJSON from sensors; published only on the WireGuard address.
+#   detect  rules, correlation, alerts and health checks; no network at all.
+#
+# Both run unprivileged, read-only, without capabilities and with resource limits.
+# Settings come from deploy/.env (see .env.example).
+
+name: nyctala
+
+x-nyctala: &nyctala
+  image: nyctala:${NYCTALA_VERSION:-local}
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile
+  user: "10001:10001"
+  read_only: true
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+  cap_drop: [ALL]
+  security_opt:
+    - no-new-privileges:true
+  volumes:
+    - nyctala-data:/data
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  ingest:
+    <<: *nyctala
+    command: [serve, --host, 0.0.0.0, --port, "8514"]
+    ports:
+      # Never 0.0.0.0: bind to the WireGuard address of this host.
+      - "${NYCTALA_BIND:-127.0.0.1}:8514:8514"
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8514/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  detect:
+    <<: *nyctala
+    command: [detect, --anchors, /anchors/anchors.ndjson]
+    network_mode: none
+    volumes:
+      - nyctala-data:/data
+      # Chain heads kept by the host (and shipped off-site); read-only in here.
+      - ${NYCTALA_ANCHORS_DIR:-./anchors}:/anchors:ro
+    mem_limit: 1g
+    cpus: 1.0
+    pids_limit: 128
+
+volumes:
+  nyctala-data:

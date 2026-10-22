@@ -14,3 +14,5 @@ htmlcov/
 data/
 *.parquet
 *.duckdb
+deploy/.env
+deploy/anchors/
