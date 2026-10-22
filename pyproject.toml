@@ -1,0 +1,25 @@
+[project]
+name = "nyctala"
+version = "0.0.1"
+description = "Lightweight detection-engineering SIEM: Sigma rules as code, tested rules, explainable alerts and measured ATT&CK coverage."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "sabitova" }]
+requires-python = ">=3.12"
+dependencies = []
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+]
+
+[project.urls]
+Repository = "https://github.com/KristinaSabitova/nyctala"
+
+[build-system]
+requires = ["uv_build>=0.13.5,<0.14"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = ""
