@@ -4,41 +4,24 @@ Order of checks, cheapest first and before reading any body from an
 unauthenticated client: auth-failure budget of the client address, bearer
 token, sensor rate limit, content type/encoding, declared size, streamed size.
 
-Each line is either an ECS-lite event or a raw log line to parse::
-
-    {"@timestamp": "...", "event.dataset": "auth_log", "user.name": "root", ...}
-    {"event.dataset": "nginx.access", "message": "<raw line>", "host.name": "web1"}
-
-Every line is validated on its own: one bad line is reported and dropped, the
-rest of the batch is stored. Error reports never echo the submitted content.
+Lines are parsed by :mod:`nyctala.ingest.lines`. Every line is validated on its
+own: one bad line is reported and dropped, the rest of the batch is stored.
+Error reports never echo the submitted content.
 """
 
-import json
-from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
-from pydantic import AwareDatetime, TypeAdapter, ValidationError
 
-from nyctala import parsers
 from nyctala.ingest.limits import Limits, RateLimiter
+from nyctala.ingest.lines import parse_line
 from nyctala.ingest.sensors import SensorRegistry
 from nyctala.schema import Event
 from nyctala.store import EventStore
 
 NDJSON_TYPES = frozenset({"application/x-ndjson", "application/jsonl", "application/json-seq"})
-
-# Set by nyctala, never by the sender: a sensor cannot speak for another sensor,
-# pick event ids, backdate ingestion or forge the integrity chain.
-SERVER_FIELDS = frozenset(
-    {"sensor.id", "event.id", "event.ingested", "integrity.hash", "integrity.prev_hash"}
-)
-CLIENT_FIELDS = frozenset(f.alias or name for name, f in Event.model_fields.items()) - SERVER_FIELDS
-RAW_FIELDS = frozenset({"message", "event.dataset", "host.name", "@timestamp"})
-
-_aware_datetime = TypeAdapter(AwareDatetime)
 
 
 class _BodyTooLarge(Exception):
@@ -55,58 +38,6 @@ def _unauthorized() -> JSONResponse:
 
 def _too_many(retry_after: int) -> JSONResponse:
     return _error(429, "rate limit exceeded", {"Retry-After": str(retry_after)})
-
-
-def _describe(exc: ValidationError) -> str:
-    # Location and error type only: the input value is attacker content.
-    return "; ".join(
-        f"{'.'.join(map(str, e['loc'])) or 'event'}: {e['type']}" for e in exc.errors()
-    )
-
-
-def _raw_events(obj: dict[str, Any], sensor_id: str) -> list[Event] | str:
-    if unknown := sorted(obj.keys() - RAW_FIELDS):
-        return f"unknown field: {', '.join(unknown)[:200]!r}"
-    message, dataset = obj.get("message"), obj.get("event.dataset")
-    if not isinstance(message, str):
-        return "message must be a string"
-    if not isinstance(dataset, str) or dataset not in parsers.PARSERS:
-        return "unknown dataset"
-    received = datetime.now(UTC)
-    if "@timestamp" in obj:
-        # When the sender saw the line: reference for headers without year or zone.
-        try:
-            received = _aware_datetime.validate_python(obj["@timestamp"])
-        except ValidationError as exc:
-            return f"@timestamp: {exc.errors()[0]['type']}"
-    try:
-        base = {"host.name": obj["host.name"]} if "host.name" in obj else {}
-        fields = parsers.parse(dataset, message, received=received)
-        return [Event.model_validate({**base, **f, "sensor.id": sensor_id}) for f in fields]
-    except ValidationError as exc:
-        return _describe(exc)
-
-
-def parse_line(raw: bytes, sensor_id: str, limits: Limits) -> list[Event] | str:
-    """Turn one NDJSON line into events, or return why it was rejected."""
-    if len(raw) > limits.max_line_bytes:
-        return "line too long"
-    try:
-        obj = json.loads(raw)
-    except (UnicodeDecodeError, ValueError, RecursionError):
-        return "invalid JSON"
-    if not isinstance(obj, dict):
-        return "line is not a JSON object"
-    if server := sorted(SERVER_FIELDS & obj.keys()):
-        return f"server-controlled field: {', '.join(server)}"
-    if "message" in obj:
-        return _raw_events(obj, sensor_id)
-    if unknown := sorted(obj.keys() - CLIENT_FIELDS):
-        return f"unknown field: {', '.join(unknown)[:200]!r}"
-    try:
-        return [Event.model_validate({**obj, "sensor.id": sensor_id})]
-    except ValidationError as exc:
-        return _describe(exc)
 
 
 async def _read_body(request: Request, limit: int) -> bytes:
@@ -169,7 +100,7 @@ def create_app(
         events: list[Event] = []
         errors: list[dict[str, Any]] = []
         for number, raw in lines:
-            result = parse_line(raw, sensor_id, limits)
+            result = parse_line(raw, sensor_id, limits.max_line_bytes)
             if isinstance(result, str):
                 errors.append({"line": number, "error": result})
             elif len(events) + len(result) > limits.max_events:
