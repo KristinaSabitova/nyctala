@@ -872,6 +872,7 @@ dependencies = [
     { name = "pyarrow" },
     { name = "pydantic" },
     { name = "pysigma" },
+    { name = "pyyaml" },
     { name = "typer" },
     { name = "uvicorn" },
 ]
@@ -892,6 +893,7 @@ requires-dist = [
     { name = "pyarrow", specifier = ">=26.0" },
     { name = "pydantic", specifier = ">=2.14" },
     { name = "pysigma", specifier = ">=2.0.1" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "typer", specifier = ">=0.27" },
     { name = "uvicorn", specifier = ">=0.54" },
 ]
