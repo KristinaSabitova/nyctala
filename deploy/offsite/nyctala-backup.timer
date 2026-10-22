@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily encrypted backup of nyctala data
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

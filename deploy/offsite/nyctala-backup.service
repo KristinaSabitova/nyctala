@@ -1,0 +1,13 @@
+[Unit]
+Description=Encrypted backup of nyctala data
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/nyctala-backup
+Nice=15
+IOSchedulingClass=idle
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
