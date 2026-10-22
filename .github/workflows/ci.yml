@@ -23,4 +23,5 @@ jobs:
       - run: uv run mypy
       - run: uv run pytest
       - run: uv run nyctala rules test
+      - run: uv run nyctala lab run
       - run: uv build

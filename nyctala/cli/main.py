@@ -20,6 +20,8 @@ rules_app = typer.Typer(no_args_is_help=True, help="Detection rules.")
 app.add_typer(rules_app, name="rules")
 alerts_app = typer.Typer(no_args_is_help=True, help="Alerts and their explanation.")
 app.add_typer(alerts_app, name="alerts")
+lab_app = typer.Typer(no_args_is_help=True, help="Synthetic attack scenarios.")
+app.add_typer(lab_app, name="lab")
 
 DataDir = Annotated[
     Path,
@@ -197,6 +199,86 @@ def coverage(
         for tid, rules in sorted(bucket.items()):
             typer.echo(f"not counted ({label}): {tid}  {', '.join(rules)}")
     typer.echo(f"\n{attack.notice}")
+
+
+@lab_app.command("list")
+def lab_list() -> None:
+    """List the bundled scenarios."""
+    from nyctala.lab.scenario import bundled_scenarios, load_scenario
+
+    for path in bundled_scenarios():
+        sc = load_scenario(path)
+        typer.echo(f"{sc.name:<20} expect: {', '.join(sc.expect) or '(no alerts)'}")
+
+
+def _scenario_paths(names: list[str] | None) -> list[Path]:
+    from nyctala.lab.scenario import bundled_scenarios
+
+    paths = bundled_scenarios()
+    if not names:
+        return paths
+    by_name = {p.stem: p for p in paths}
+    missing = [n for n in names if n not in by_name and not Path(n).is_file()]
+    if missing:
+        raise typer.BadParameter(f"unknown scenario(s): {', '.join(missing)}")
+    return [by_name.get(n) or Path(n) for n in names]
+
+
+@lab_app.command("run")
+def lab_run(
+    scenarios: Annotated[
+        list[str] | None, typer.Argument(help="Scenario names or files (default: all bundled).")
+    ] = None,
+    rules_dir: Annotated[
+        Path | None, typer.Option("--rules", help="Rules directory (default: bundled rules).")
+    ] = None,
+) -> None:
+    """Replay scenarios in a throwaway store; the alerts must match exactly. Exit 1 if not."""
+    from nyctala.engine.ruleset import load_ruleset
+    from nyctala.engine.testing import RULES_DIR
+    from nyctala.lab.scenario import ScenarioError, load_scenario, run_scenario
+
+    ruleset = load_ruleset(rules_dir or RULES_DIR)
+    failed = 0
+    for path in _scenario_paths(scenarios):
+        try:
+            result = run_scenario(load_scenario(path), ruleset)
+        except ScenarioError as exc:
+            typer.echo(f"FAIL  {path.stem:<20} {exc}")
+            failed += 1
+            continue
+        failed += not result.passed
+        mark = "PASS" if result.passed else "FAIL"
+        alerted = ", ".join(sorted(result.alerted)) or "(no alerts)"
+        typer.echo(f"{mark}  {result.scenario:<20} {result.events:>4} events  -> {alerted}")
+        for name in sorted(result.missing):
+            typer.echo(f"      missing:    {name}")
+        for name in sorted(result.unexpected):
+            typer.echo(f"      unexpected: {name}")
+        for error in result.rejected:
+            typer.echo(f"      rejected:   {error}")
+    if failed:
+        raise typer.Exit(1)
+
+
+@lab_app.command("replay")
+def lab_replay(
+    scenario: Annotated[str, typer.Argument(help="Scenario name or file.")],
+    url: Annotated[
+        str, typer.Option(help="nyctala ingest URL, e.g. http://10.8.0.1:8514/v1/ingest")
+    ],
+) -> None:
+    """Send a scenario, timed to end now, to a running nyctala. Token from $NYCTALA_TOKEN."""
+    from nyctala.lab.scenario import load_scenario, replay
+
+    token = os.environ.get("NYCTALA_TOKEN")
+    if not token:
+        raise typer.BadParameter(
+            "set NYCTALA_TOKEN to the sensor token (never pass it as an argument)"
+        )
+    (path,) = _scenario_paths([scenario])
+    accepted = replay(load_scenario(path), url, token)
+    typer.echo(f"accepted {accepted} events")
 
 
 @app.command()

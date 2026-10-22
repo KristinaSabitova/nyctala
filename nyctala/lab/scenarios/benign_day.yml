@@ -1,0 +1,20 @@
+name: benign_day
+description: >
+  Ordinary administration and web traffic that must not alert: a user who
+  mistypes their password twice, routine sudo, crontab listing, cron jobs,
+  searches that look like SQL words and normal downloads.
+expect: []
+events:
+  - {at: 0, dataset: auth_log, line: "{syslog} vps-a sshd[3001]: Failed password for alice from 198.51.100.30 port 51000 ssh2"}
+  - {at: 4, dataset: auth_log, line: "{syslog} vps-a sshd[3001]: Failed password for alice from 198.51.100.30 port 51000 ssh2"}
+  - {at: 9, dataset: auth_log, line: "{syslog} vps-a sshd[3001]: Accepted password for alice from 198.51.100.30 port 51000 ssh2"}
+  - {at: 30, dataset: auth_log, line: "{syslog} vps-a sudo:    alice : TTY=pts/1 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/apt update"}
+  - {at: 40, dataset: auth_log, line: "{syslog} vps-a sudo:    alice : TTY=pts/1 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx"}
+  - {at: 50, dataset: auth_log, line: "{syslog} vps-a crontab[3100]: (alice) LIST (alice)"}
+  - {at: 60, every: 60, repeat: 5, dataset: auth_log, line: "{syslog} vps-a CRON[3200]: (root) CMD (/usr/local/bin/backup.sh)"}
+  - {at: 0, every: 5, repeat: 40, dataset: nginx.access,
+     line: '198.51.100.40 - - [{nginx}] "GET /search?q=union+station HTTP/1.1" 200 5120 "-" "Mozilla/5.0"'}
+  - {at: 100, dataset: nginx.access,
+     line: '198.51.100.40 - - [{nginx}] "GET /users?name=O%27Brien HTTP/1.1" 200 2048 "-" "Mozilla/5.0"'}
+  - {at: 120, dataset: nginx.access,
+     line: '198.51.100.41 - - [{nginx}] "GET /downloads/manual.pdf HTTP/1.1" 200 8388608 "-" "Mozilla/5.0"'}

@@ -1,0 +1,22 @@
+name: ssh_intrusion
+description: >
+  Brute force against root from one address until a password works, then a
+  user logs in, opens a root shell with sudo and plants a crontab for www-data.
+expect:
+  - ssh_bruteforce
+  - ssh_bruteforce_success
+  - sudo_root_shell
+  - sudo_root_shell_after_login
+  - crontab_modification
+  - entity_risk
+events:
+  - {at: 0, every: 3, repeat: 6, dataset: auth_log,
+     line: "{syslog} vps-a sshd[1001]: Failed password for root from 203.0.113.7 port 50000 ssh2"}
+  - {at: 30, dataset: auth_log,
+     line: "{syslog} vps-a sshd[1002]: Accepted password for root from 203.0.113.7 port 50100 ssh2"}
+  - {at: 60, dataset: auth_log,
+     line: "{syslog} vps-a sshd[1003]: Accepted publickey for kris from 198.51.100.20 port 40022 ssh2: ED25519 SHA256:AbCd"}
+  - {at: 90, dataset: auth_log,
+     line: "{syslog} vps-a sudo:     kris : TTY=pts/0 ; PWD=/home/kris ; USER=root ; COMMAND=/bin/bash"}
+  - {at: 120, dataset: auth_log,
+     line: "{syslog} vps-a crontab[3001]: (root) REPLACE (www-data)"}

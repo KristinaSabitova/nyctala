@@ -1,0 +1,14 @@
+name: web_attack
+description: >
+  sqlmap-style injection burst against a product page, then a large database
+  dump downloaded from the same address.
+expect:
+  - web_sqli_repeated
+  - http_large_response
+events:
+  - {at: 0, every: 2, repeat: 8, dataset: nginx.access,
+     line: '203.0.113.7 - - [{nginx}] "GET /products?id=1%27%20OR%20%271%27=%271 HTTP/1.1" 500 312 "-" "sqlmap/1.8#stable"'}
+  - {at: 20, dataset: nginx.access,
+     line: '203.0.113.7 - - [{nginx}] "GET /products?id=-1+UNION+ALL+SELECT+1,2,3 HTTP/1.1" 200 4096 "-" "sqlmap/1.8#stable"'}
+  - {at: 60, dataset: nginx.access,
+     line: '203.0.113.7 - - [{nginx}] "GET /backup/db.sql.gz HTTP/1.1" 200 2147483648 "-" "Wget/1.21"'}
