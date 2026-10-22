@@ -15,6 +15,7 @@ from fastapi import FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 
+from nyctala.health.integrity import IntegrityChain
 from nyctala.ingest.limits import Limits, RateLimiter
 from nyctala.ingest.lines import parse_line
 from nyctala.ingest.sensors import SensorRegistry
@@ -53,9 +54,13 @@ async def _read_body(request: Request, limit: int) -> bytes:
 
 
 def create_app(
-    store: EventStore, registry: SensorRegistry, limits: Limits | None = None
+    store: EventStore,
+    registry: SensorRegistry,
+    limits: Limits | None = None,
+    chain: IntegrityChain | None = None,
 ) -> FastAPI:
     limits = limits or Limits()
+    chain = chain or IntegrityChain(store)
     sensor_limiter = RateLimiter(limits.sensor_rate, limits.sensor_burst)
     auth_failures = RateLimiter(limits.auth_failure_rate, limits.auth_failure_burst)
 
@@ -109,7 +114,8 @@ def create_app(
                 events.extend(result)
 
         if events:
-            await run_in_threadpool(store.append, events)
+            # Sealed into the sensor's hash chain as they are written.
+            await run_in_threadpool(chain.append, sensor_id, events)
         return {
             "accepted": len(events),
             "rejected": len(errors),

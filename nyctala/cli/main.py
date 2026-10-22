@@ -4,14 +4,12 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated
 
 import typer
 
 from nyctala.ingest.sensors import SensorError, SensorRegistry
-
-if TYPE_CHECKING:
-    from nyctala.schema import Alert
+from nyctala.schema import Alert
 
 app = typer.Typer(no_args_is_help=True, help="Lightweight detection-engineering SIEM.")
 sensor_app = typer.Typer(no_args_is_help=True, help="Manage sensors and their ingest tokens.")
@@ -22,6 +20,8 @@ alerts_app = typer.Typer(no_args_is_help=True, help="Alerts and their explanatio
 app.add_typer(alerts_app, name="alerts")
 lab_app = typer.Typer(no_args_is_help=True, help="Synthetic attack scenarios.")
 app.add_typer(lab_app, name="lab")
+integrity_app = typer.Typer(no_args_is_help=True, help="Hash chain over stored events.")
+app.add_typer(integrity_app, name="integrity")
 
 DataDir = Annotated[
     Path,
@@ -281,6 +281,43 @@ def lab_replay(
     typer.echo(f"accepted {accepted} events")
 
 
+@integrity_app.command("verify")
+def integrity_verify(
+    data: DataDir = Path("data"),
+    anchors: Annotated[
+        Path | None, typer.Option(help="Anchors recorded earlier (NDJSON from `integrity anchor`).")
+    ] = None,
+) -> None:
+    """Recompute every event hash and walk each sensor's chain. Exit 1 on any damage."""
+    from nyctala.health.integrity import read_anchors, verify
+    from nyctala.store import EventStore
+
+    recorded = read_anchors(anchors.read_text().splitlines()) if anchors else None
+    reports = verify(EventStore(data), recorded)
+    for r in reports:
+        state = "OK    " if r.ok else "BROKEN"
+        head = r.head[:16] if r.head else "-"
+        unsealed = f"  ({r.unsealed} unsealed)" if r.unsealed else ""
+        typer.echo(f"{state} {r.sensor:<20} events={r.events:<8} head={head}{unsealed}")
+        for problem in r.problems():
+            typer.echo(f"       {problem}")
+    if any(not r.ok for r in reports):
+        raise typer.Exit(1)
+
+
+@integrity_app.command("anchor")
+def integrity_anchor(data: DataDir = Path("data")) -> None:
+    """Print the current chain heads as NDJSON, to append to an off-host log."""
+    from datetime import UTC, datetime
+
+    from nyctala.health.integrity import anchors_now
+    from nyctala.store import EventStore
+
+    at = datetime.now(UTC).isoformat()
+    for anchor in anchors_now(EventStore(data)):
+        typer.echo(json.dumps({"at": at, **anchor}))
+
+
 @app.command()
 def detect(
     data: DataDir = Path("data"),
@@ -321,7 +358,7 @@ def detect(
         stop.set()
 
 
-def _alert_line(alert: "Alert") -> str:
+def _alert_line(alert: Alert) -> str:
     techniques = ",".join(alert.techniques) or "-"
     return (
         f"{alert.last:%Y-%m-%d %H:%M:%S}  {alert.rule_level:<8} risk={alert.risk_accumulated:<4} "
