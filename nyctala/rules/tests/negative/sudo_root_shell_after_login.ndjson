@@ -1,0 +1,9 @@
+{"message": "Oct 22 09:00:00 vps-a sudo:     kris : TTY=pts/0 ; PWD=/home/kris ; USER=root ; COMMAND=/bin/bash", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "Oct 22 10:00:00 vps-a sshd[2]: Accepted password for kris from 198.51.100.20 port 50001 ssh2", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "Oct 22 10:01:00 vps-a sudo:     kris : TTY=pts/0 ; PWD=/home/kris ; USER=root ; COMMAND=/usr/bin/apt update", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "Oct 22 11:00:00 vps-a sshd[2]: Accepted password for kris from 198.51.100.20 port 50001 ssh2", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "Oct 22 11:30:00 vps-a sudo:     kris : TTY=pts/0 ; PWD=/home/kris ; USER=root ; COMMAND=/bin/bash", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "Oct 22 12:00:00 vps-a sshd[2]: Accepted password for alice from 198.51.100.20 port 50001 ssh2", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "Oct 22 12:01:00 vps-a sudo:     bob : TTY=pts/0 ; PWD=/home/bob ; USER=root ; COMMAND=/bin/bash", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "Oct 22 13:00:00 vps-b sshd[2]: Accepted password for kris from 198.51.100.20 port 50001 ssh2", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}
+{"message": "Oct 22 13:01:00 vps-a sudo:     kris : TTY=pts/0 ; PWD=/home/kris ; USER=root ; COMMAND=/bin/bash", "event.dataset": "auth_log", "@timestamp": "2026-10-22T12:00:00Z"}

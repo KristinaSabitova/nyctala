@@ -72,6 +72,7 @@ def rules_test(
                 "rule": r.name,
                 "id": r.rule.id if r.rule else None,
                 "techniques": list(r.rule.techniques) if r.rule else [],
+                "kind": "correlation" if r.is_correlation else "detection",
                 "passed": r.passed,
                 "positive": {"total": r.positive_total, "matched": r.positive_matched},
                 "negative": {"total": r.negative_total, "matched": r.negative_matched},
@@ -84,16 +85,22 @@ def rules_test(
         for r in results:
             mark = "PASS" if r.passed else "FAIL"
             techniques = ",".join(r.rule.techniques) if r.rule else "-"
-            typer.echo(
-                f"{mark}  {r.name:<28} {techniques:<12} "
-                f"positive {r.positive_matched}/{r.positive_total}  "
-                f"negative {r.negative_matched}/{r.negative_total}"
-            )
+            if r.is_correlation:
+                counts = f"positive fired {r.positive_matched}  negative fired {r.negative_matched}"
+            else:
+                counts = (
+                    f"positive {r.positive_matched}/{r.positive_total}  "
+                    f"negative {r.negative_matched}/{r.negative_total}"
+                )
+            typer.echo(f"{mark}  {r.name:<30} {techniques:<20} {counts}")
             for error in r.errors:
                 typer.echo(f"      error: {error}")
             if r.rule and r.negative_matched:
-                typer.echo(f"      false positives: {r.negative_matched} negative event(s) matched")
-            if r.rule and r.positive_matched < r.positive_total:
+                unit = "firing(s)" if r.is_correlation else "negative event(s) matched"
+                typer.echo(f"      false positives: {r.negative_matched} {unit}")
+            if r.rule and r.is_correlation and r.positive_total and not r.positive_matched:
+                typer.echo("      false negatives: did not fire on the positive fixture")
+            elif r.rule and not r.is_correlation and r.positive_matched < r.positive_total:
                 missed = r.positive_total - r.positive_matched
                 typer.echo(f"      false negatives: {missed} positive event(s) not matched")
         typer.echo(f"\n{len(results) - len(failed)}/{len(results)} rules passed")

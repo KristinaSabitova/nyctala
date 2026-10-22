@@ -99,7 +99,10 @@ def test_broken_rule_is_reported_not_crashing(rules: Path) -> None:
     result = runner.invoke(app, ["rules", "test", str(rules)])
     assert result.exit_code == 1
     assert "unknown field: 'event.outcom'" in result.output
-    assert "4/5 rules passed" in result.output
+    # Correlations built on it fail too, instead of silently never firing.
+    for dependent in ("ssh_bruteforce ", "ssh_bruteforce_success", "ssh_password_spray"):
+        assert f"FAIL  {dependent}" in result.output
+    assert "references a rule that failed to load" in result.output
 
 
 def test_no_rules_fails(tmp_path: Path) -> None:

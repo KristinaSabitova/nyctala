@@ -1,0 +1,22 @@
+title: SSH brute force
+name: ssh_bruteforce
+id: de64487b-01ed-4984-9252-7729dcfdcab4
+status: test
+description: Five or more failed SSH logins from one source address within ten minutes.
+author: sabitova
+date: 2026-10-22
+tags:
+  - attack.credential-access
+  - attack.t1110.001
+correlation:
+  type: event_count
+  rules:
+    - ssh_failed_login
+  group-by:
+    - source.ip
+  timespan: 10m
+  condition:
+    gte: 5
+falsepositives:
+  - A misconfigured client retrying with a stale password
+level: medium

@@ -1,4 +1,5 @@
 title: SSH failed login
+name: ssh_failed_login
 id: 9b684430-7681-4f78-b4d6-020e84cf2727
 status: test
 description: >

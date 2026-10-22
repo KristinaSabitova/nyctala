@@ -1,4 +1,5 @@
 title: SQL injection pattern in URL query
+name: web_sqli_pattern
 id: be3f5749-d444-4868-9370-732ce9cb4e9d
 status: test
 description: >

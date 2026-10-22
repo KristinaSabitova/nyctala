@@ -1,4 +1,5 @@
 title: Sudo to an interactive root shell
+name: sudo_root_shell
 id: d09d433d-4ea1-4d77-9f1a-1febf7776e5b
 status: test
 description: >

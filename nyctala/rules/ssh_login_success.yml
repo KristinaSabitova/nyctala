@@ -1,0 +1,24 @@
+title: SSH login succeeded
+name: ssh_login_success
+id: 3279c872-bbc1-4609-947c-b01dd8e0e089
+status: test
+description: >
+  A successful SSH authentication. Building block for correlations (valid
+  accounts used after brute force, privilege escalation after login); does not
+  alert on its own.
+author: sabitova
+date: 2026-10-22
+tags:
+  - attack.initial-access
+  - attack.t1078
+logsource:
+  product: linux
+  service: auth
+detection:
+  selection:
+    event.action: ssh_login
+    event.outcome: success
+  condition: selection
+falsepositives:
+  - Every legitimate login
+level: informational

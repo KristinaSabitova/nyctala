@@ -20,6 +20,7 @@ rule fails the rule tests instead of silently never matching.
 """
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -34,6 +35,7 @@ from sigma.conditions import (
     ConditionOR,
     ConditionValueExpression,
 )
+from sigma.correlations import SigmaCorrelationRule
 from sigma.exceptions import SigmaError
 from sigma.rule import SigmaRule
 from sigma.types import (
@@ -90,6 +92,7 @@ class RuleError(ValueError):
 @dataclass(frozen=True)
 class Rule:
     id: str
+    name: str | None
     title: str
     level: str
     techniques: tuple[str, ...]
@@ -99,9 +102,13 @@ class Rule:
     path: Path | None = None
     tags: tuple[str, ...] = field(default_factory=tuple)
 
-    def query(self) -> tuple[str, list[Any]]:
-        """``SELECT`` returning the ids of matching events."""
-        sql = f'SELECT "event.id" AS id FROM events WHERE {self.where}'  # noqa: S608
+    def query(self, fields: Sequence[str] = ()) -> tuple[str, list[Any]]:
+        """``SELECT`` of matching events: ``id``, ``ts`` and the requested fields."""
+        for name in fields:
+            if name not in FIELDS:
+                raise RuleError(f"unknown field: {name!r}")
+        extra = "".join(f", {_column(f)} AS {_column(f)}" for f in fields)
+        sql = f'SELECT "event.id" AS id, "@timestamp" AS ts{extra} FROM events WHERE {self.where}'  # noqa: S608
         return sql, list(self.params)
 
 
@@ -199,6 +206,10 @@ def _like_pattern(value: SigmaString) -> str:
     return "".join(out)
 
 
+def _techniques(tags: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(m[1].upper() for t in tags if (m := _TECHNIQUE.match(t)))
+
+
 def _datasets(rule: SigmaRule) -> tuple[str, ...]:
     ls = rule.logsource
     key = (ls.category, ls.product, ls.service)
@@ -219,9 +230,10 @@ def compile_rule(sigma: SigmaRule, path: Path | None = None) -> Rule:
         raise RuleError(str(exc)) from exc
     where = f'("event.dataset" IN ({dataset_sql})) AND ({" OR ".join(conditions)})'
     tags = tuple(str(t) for t in sigma.tags)
-    techniques = tuple(m[1].upper() for t in tags if (m := _TECHNIQUE.match(t)))
+    techniques = _techniques(tags)
     return Rule(
         id=str(sigma.id),
+        name=sigma.name,
         title=sigma.title,
         level=str(sigma.level.name).lower() if sigma.level else "",
         techniques=techniques,
@@ -233,18 +245,27 @@ def compile_rule(sigma: SigmaRule, path: Path | None = None) -> Rule:
     )
 
 
-def load_rule(path: Path) -> Rule:
+def load_sigma_file(path: Path) -> SigmaRule | SigmaCorrelationRule:
+    """Parse one rule file; it must hold exactly one rule with an id."""
     try:
-        collection = SigmaCollection.from_yaml(path.read_text(), collect_errors=True)
+        collection = SigmaCollection.from_yaml(
+            path.read_text(), collect_errors=True, resolve_references=False
+        )
     except (SigmaError, yaml.YAMLError) as exc:
-        raise RuleError(f"{path.name}: {exc}") from exc
+        raise RuleError(str(exc)) from exc
     if collection.errors:
-        raise RuleError(f"{path.name}: {collection.errors[0]}")
-    rules = [r for r in collection.rules if isinstance(r, SigmaRule)]
-    if len(rules) != 1:
-        raise RuleError(f"{path.name}: expected exactly one rule, found {len(collection.rules)}")
-    try:
-        rule = compile_rule(rules[0], path)
-    except RuleError as exc:
-        raise RuleError(f"{path.name}: {exc}") from exc
+        raise RuleError(str(collection.errors[0]))
+    if len(collection.rules) != 1:
+        raise RuleError(f"expected exactly one rule, found {len(collection.rules)}")
+    rule = collection.rules[0]
+    if rule.id is None:
+        raise RuleError("rule has no id")
     return rule
+
+
+def load_rule(path: Path) -> Rule:
+    """Load a single base (non-correlation) rule."""
+    sigma = load_sigma_file(path)
+    if not isinstance(sigma, SigmaRule):
+        raise RuleError("not a detection rule")
+    return compile_rule(sigma, path)

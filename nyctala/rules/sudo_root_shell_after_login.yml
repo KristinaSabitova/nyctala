@@ -1,0 +1,27 @@
+title: Root shell through sudo right after an SSH login
+name: sudo_root_shell_after_login
+id: d4b8eced-5c02-47bc-a3eb-ca06f42a993f
+status: test
+description: >
+  A user logs in over SSH and, within fifteen minutes on the same host, opens
+  an interactive root shell with sudo. Typical of an intruder using a stolen
+  account to take over the machine.
+author: sabitova
+date: 2026-10-22
+tags:
+  - attack.privilege-escalation
+  - attack.t1548.003
+  - attack.t1078
+correlation:
+  type: temporal_ordered
+  rules:
+    - ssh_login_success
+    - sudo_root_shell
+  group-by:
+    - user.name
+    - host.name
+  timespan: 15m
+  generate: true
+falsepositives:
+  - Administrators who log in and immediately become root
+level: high

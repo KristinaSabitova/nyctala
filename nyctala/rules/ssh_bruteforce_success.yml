@@ -1,0 +1,25 @@
+title: SSH brute force followed by a successful login
+name: ssh_bruteforce_success
+id: d9f9ef7b-4a75-488b-aced-66d1856bab9d
+status: test
+description: >
+  An SSH brute force from a source address, then a successful login from the
+  same address within thirty minutes: the guessed credentials probably worked.
+author: sabitova
+date: 2026-10-22
+tags:
+  - attack.credential-access
+  - attack.t1110.001
+  - attack.initial-access
+  - attack.t1078
+correlation:
+  type: temporal_ordered
+  rules:
+    - ssh_bruteforce
+    - ssh_login_success
+  group-by:
+    - source.ip
+  timespan: 30m
+falsepositives:
+  - A user who forgot their password, retried many times and finally got it right
+level: high

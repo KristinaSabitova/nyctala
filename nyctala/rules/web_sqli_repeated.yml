@@ -1,0 +1,22 @@
+title: Repeated SQL injection attempts from one address
+name: web_sqli_repeated
+id: 9bf03d35-9fd4-4ac4-8ba2-6c5e92fe0e69
+status: test
+description: Five or more requests with SQL injection patterns from one source address within five minutes.
+author: sabitova
+date: 2026-10-22
+tags:
+  - attack.initial-access
+  - attack.t1190
+correlation:
+  type: event_count
+  rules:
+    - web_sqli_pattern
+  group-by:
+    - source.ip
+  timespan: 5m
+  condition:
+    gte: 5
+falsepositives:
+  - Authorised vulnerability scans
+level: high
