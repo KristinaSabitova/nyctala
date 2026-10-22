@@ -22,7 +22,7 @@ class Alert(BaseModel):
 
     alert_id: str = Field(default_factory=lambda: str(uuid.uuid4()), alias="alert.id")
     created: UtcDatetime = Field(default_factory=lambda: datetime.now(UTC), alias="alert.created")
-    kind: Literal["detection", "correlation", "risk"] = Field(alias="alert.kind")
+    kind: Literal["detection", "correlation", "risk", "health"] = Field(alias="alert.kind")
     rule_id: str = Field(alias="rule.id")
     rule_name: str | None = Field(default=None, alias="rule.name")
     rule_title: str = Field(alias="rule.title")

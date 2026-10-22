@@ -281,6 +281,38 @@ def lab_replay(
     typer.echo(f"accepted {accepted} events")
 
 
+@app.command()
+def health(
+    data: DataDir = Path("data"),
+    silence: Annotated[float, typer.Option(help="Minutes without events = silent.", min=1)] = 15,
+    as_json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Status of every log source: silent sources, lag, skew, parse failures. Exit 1 on problems."""
+    from datetime import UTC, datetime, timedelta
+
+    from nyctala.health.monitor import HealthMonitor
+    from nyctala.health.sources import HealthPolicy, source_health
+    from nyctala.store import EventStore
+
+    store = EventStore(data)
+    now = datetime.now(UTC)
+    sensors = HealthMonitor(store, _registry(data)).active_sensors()
+    statuses = source_health(store, sensors, now, HealthPolicy(silence=timedelta(minutes=silence)))
+    if as_json:
+        for st in statuses:
+            typer.echo(json.dumps(st.to_record(now), default=str))
+    else:
+        for st in statuses:
+            last = f"{st.last_ingested:%Y-%m-%d %H:%M:%S}" if st.last_ingested else "never"
+            lag = f"p50={st.lag_p50:.1f}s p95={st.lag_p95:.1f}s" if st.lag_p95 is not None else "-"
+            typer.echo(
+                f"{st.status:<10} {st.sensor + '/' + (st.dataset or '*'):<28} last={last}  "
+                f"events(1h)={st.events:<6} lag {lag}  future={st.future} unparsed={st.unparsed}"
+            )
+    if any(st.status != "ok" or st.future for st in statuses):
+        raise typer.Exit(1)
+
+
 @integrity_app.command("verify")
 def integrity_verify(
     data: DataDir = Path("data"),
@@ -326,8 +358,12 @@ def detect(
     ] = None,
     interval: Annotated[float, typer.Option(help="Seconds between runs.", min=1)] = 10.0,
     once: Annotated[bool, typer.Option("--once", help="Run a single pass and exit.")] = False,
+    anchors: Annotated[
+        Path | None,
+        typer.Option(help="Anchors file to verify the hash chains against (see integrity anchor)."),
+    ] = None,
 ) -> None:
-    """Run the detection job: store alerts and print each new one."""
+    """Run the detection job and health checks: store alerts and print each new one."""
     import threading
 
     from nyctala.engine.alerts import AlertManager
@@ -347,7 +383,14 @@ def detect(
         for alert in manager.handle(hits):
             typer.echo(_alert_line(alert))
 
-    job = DetectionJob(store, ruleset, emit, interval=interval)
+    from nyctala.health.monitor import HealthMonitor
+
+    def emit_health(alerts: list[Alert]) -> None:
+        for alert in alerts:
+            typer.echo(_alert_line(alert))
+
+    monitor = HealthMonitor(store, _registry(data), emit_health, anchors=anchors)
+    job = DetectionJob(store, ruleset, emit, interval=interval, hooks=[monitor.tick])
     if once:
         job.run_once()
         return

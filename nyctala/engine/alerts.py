@@ -275,7 +275,8 @@ def entity_risk(store: EventStore, at: datetime, window: timedelta) -> list[Enti
         SELECT entity, sum("risk.score")::INTEGER AS score, count(*) AS alerts,
                count(DISTINCT "rule.id") AS rules, max("alert.last") AS last
         FROM (SELECT unnest("alert.entities") AS entity, * FROM alerts
-              WHERE "alert.kind" != 'risk' AND "alert.last" > ? AND "alert.last" <= ?)
+              WHERE "alert.kind" NOT IN ('risk', 'health')
+                AND "alert.last" > ? AND "alert.last" <= ?)
         GROUP BY entity ORDER BY score DESC, entity
         """,
         [at - window, at],

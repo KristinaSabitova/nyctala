@@ -43,13 +43,16 @@ class DetectionJob:
     interval: float = 10.0
     lag: timedelta = timedelta(minutes=5)
     clock: Callable[[], datetime] = _now
+    # Called with the run's time after each detection pass (e.g. health checks).
+    hooks: list[Callable[[datetime], object]] = field(default_factory=list)
     _reported: dict[tuple[str, tuple[Any, ...]], list[_Reported]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         since = self.clock() - 2 * self.window
         rows = self.store.query(
             'SELECT "rule.id" AS rule, "alert.group" AS grp, "alert.event_ids" AS ids, '
-            '"alert.last" AS last FROM alerts WHERE "alert.kind" != \'risk\' AND "alert.last" >= ?',
+            '"alert.last" AS last FROM alerts '
+            "WHERE \"alert.kind\" NOT IN ('risk', 'health') AND \"alert.last\" >= ?",
             [since],
         )
         for row in rows:
@@ -79,6 +82,8 @@ class DetectionJob:
         self._forget(now - 2 * window)
         if new:
             self.sink(sorted(new, key=lambda h: h.last))
+        for hook in self.hooks:
+            hook(now)
         return new
 
     def _forget(self, before: datetime) -> None:

@@ -5,6 +5,7 @@ Layout::
     <root>/events/dt=YYYY-MM-DD/part-<uuid>.parquet   (day of ingestion)
     <root>/alerts/dt=YYYY-MM-DD/part-<uuid>.parquet   (day the alert was raised)
     <root>/rule_tests/dt=YYYY-MM-DD/part-<uuid>.parquet  (day of the test run)
+    <root>/source_health/dt=YYYY-MM-DD/part-<uuid>.parquet  (day of the check)
 
 Both tables are append-only: files are added, never rewritten.
 
@@ -106,7 +107,29 @@ RULE_TEST_SCHEMA = pa.schema(
     ]
 )
 
-TABLES = {"events": EVENT_SCHEMA, "alerts": ALERT_SCHEMA, "rule_tests": RULE_TEST_SCHEMA}
+SOURCE_HEALTH_SCHEMA = pa.schema(
+    [
+        ("check.at", _TS),
+        ("sensor.id", pa.string()),
+        ("event.dataset", pa.string()),
+        ("source.status", pa.string()),
+        ("source.last_ingested", _TS),
+        ("source.last_event", _TS),
+        ("source.events", pa.int64()),
+        ("lag.p50", pa.float64()),
+        ("lag.p95", pa.float64()),
+        ("lag.max", pa.float64()),
+        ("source.future_events", pa.int64()),
+        ("source.unparsed", pa.int64()),
+    ]
+)
+
+TABLES = {
+    "events": EVENT_SCHEMA,
+    "alerts": ALERT_SCHEMA,
+    "rule_tests": RULE_TEST_SCHEMA,
+    "source_health": SOURCE_HEALTH_SCHEMA,
+}
 PARTITION_COLUMN = "dt"
 
 
@@ -175,7 +198,13 @@ class EventStore:
 
     def append_rule_tests(self, run_at: datetime, records: Iterable[dict[str, Any]]) -> int:
         """Write the results of one ``rules test`` run."""
-        return self._append("rule_tests", ((run_at, r) for r in records))
+        return self.append_records("rule_tests", run_at, records)
+
+    def append_records(self, table: str, at: datetime, records: Iterable[dict[str, Any]]) -> int:
+        """Write rows (keyed by column name) to a secondary table, partitioned by ``at``."""
+        if table not in TABLES or table == "events":
+            raise ValueError(f"not a record table: {table!r}")
+        return self._append(table, ((at, r) for r in records))
 
     def _append(self, table: str, rows: Iterable[tuple[datetime, dict[str, Any]]]) -> int:
         by_day: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -210,7 +239,7 @@ class EventStore:
             self._con.execute(f"CREATE OR REPLACE TEMP VIEW {table} AS SELECT * FROM {source}")  # noqa: S608
 
     def query(self, sql: str, params: Sequence[Any] | None = None) -> list[dict[str, Any]]:
-        """Run one read-only ``SELECT`` against the ``events``, ``alerts`` and ``rule_tests`` views.
+        """Run one read-only ``SELECT`` against the table views (events, alerts, ...).
 
         Values must go through ``params``; the statement text is never built
         from event content.
