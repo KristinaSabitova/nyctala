@@ -1,8 +1,11 @@
-"""Event storage: Parquet partitioned by ingestion day, queried with DuckDB.
+"""Event and alert storage: Parquet partitioned by day, queried with DuckDB.
 
 Layout::
 
-    <root>/events/dt=YYYY-MM-DD/part-<uuid>.parquet
+    <root>/events/dt=YYYY-MM-DD/part-<uuid>.parquet   (day of ingestion)
+    <root>/alerts/dt=YYYY-MM-DD/part-<uuid>.parquet   (day the alert was raised)
+
+Both tables are append-only: files are added, never rewritten.
 
 Partitions use the ingestion day (set by nyctala) rather than ``@timestamp``
 (set by the log source): a hostile source cannot spray events over thousands
@@ -15,6 +18,7 @@ import os
 import uuid
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +28,7 @@ import duckdb.sqltypes as dt
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from nyctala.schema import Event
+from nyctala.schema import Alert, Event
 
 _TS = pa.timestamp("us", tz="UTC")
 
@@ -59,6 +63,30 @@ EVENT_SCHEMA = pa.schema(
     ]
 )
 
+ALERT_SCHEMA = pa.schema(
+    [
+        ("alert.id", pa.string()),
+        ("alert.created", _TS),
+        ("alert.kind", pa.string()),
+        ("rule.id", pa.string()),
+        ("rule.name", pa.string()),
+        ("rule.title", pa.string()),
+        ("rule.level", pa.string()),
+        ("threat.technique.id", pa.list_(pa.string())),
+        ("alert.first", _TS),
+        ("alert.last", _TS),
+        ("alert.group", pa.string()),
+        ("alert.event_ids", pa.list_(pa.string())),
+        ("related.alert_ids", pa.list_(pa.string())),
+        ("alert.entities", pa.list_(pa.string())),
+        ("risk.score", pa.int32()),
+        ("risk.accumulated", pa.int32()),
+        ("risk.entity", pa.string()),
+        ("alert.explanation", pa.string()),
+    ]
+)
+
+TABLES = {"events": EVENT_SCHEMA, "alerts": ALERT_SCHEMA}
 PARTITION_COLUMN = "dt"
 
 
@@ -84,8 +112,10 @@ class QueryError(ValueError):
 class EventStore:
     def __init__(self, root: Path) -> None:
         self.root = root.resolve()
+        for table in TABLES:
+            (self.root / table).mkdir(mode=0o700, parents=True, exist_ok=True)
         self.events_dir = self.root / "events"
-        self.events_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self.alerts_dir = self.root / "alerts"
         self._con = self._connect()
 
     def _connect(self) -> duckdb.DuckDBPyConnection:
@@ -104,7 +134,8 @@ class EventStore:
         con.execute("SET allowed_directories = [?]", [f"{self.root}/"])
         con.execute("SET enable_external_access = false")
         con.execute("SET lock_configuration = true")
-        con.register("_empty_events", EVENT_SCHEMA.empty_table())
+        for table, schema in TABLES.items():
+            con.register(f"_empty_{table}", schema.empty_table())
         con.create_function(
             "nyctala_cidr_match",
             cidr_match,
@@ -116,15 +147,22 @@ class EventStore:
 
     def append(self, events: Iterable[Event]) -> int:
         """Write ``events`` as one new Parquet file per ingestion day."""
+        return self._append("events", ((e.event_ingested, e.to_record()) for e in events))
+
+    def append_alerts(self, alerts: Iterable[Alert]) -> int:
+        """Write ``alerts`` as one new Parquet file per day of creation."""
+        return self._append("alerts", ((a.created, a.to_record()) for a in alerts))
+
+    def _append(self, table: str, rows: Iterable[tuple[datetime, dict[str, Any]]]) -> int:
         by_day: dict[str, list[dict[str, Any]]] = defaultdict(list)
-        for event in events:
-            by_day[event.event_ingested.date().isoformat()].append(event.to_record())
+        for when, record in rows:
+            by_day[when.date().isoformat()].append(record)
         for day, records in by_day.items():
-            self._write(day, pa.Table.from_pylist(records, schema=EVENT_SCHEMA))
+            self._write(table, day, pa.Table.from_pylist(records, schema=TABLES[table]))
         return sum(len(r) for r in by_day.values())
 
-    def _write(self, day: str, table: pa.Table) -> None:
-        partition = self.events_dir / f"{PARTITION_COLUMN}={day}"
+    def _write(self, table_name: str, day: str, table: pa.Table) -> None:
+        partition = self.root / table_name / f"{PARTITION_COLUMN}={day}"
         partition.mkdir(mode=0o700, exist_ok=True)
         name = f"part-{uuid.uuid4()}.parquet"
         tmp = partition / f".{name}.tmp"
@@ -133,20 +171,22 @@ class EventStore:
         os.chmod(tmp, 0o600)
         os.replace(tmp, partition / name)
 
-    def _refresh_view(self) -> None:
-        if any(self.events_dir.glob(f"{PARTITION_COLUMN}=*/*.parquet")):
-            pattern = str(self.events_dir / "*" / "*.parquet").replace("'", "''")
-            source = (
-                f"read_parquet('{pattern}', hive_partitioning = true, "
-                f"hive_types = {{'{PARTITION_COLUMN}': DATE}}, union_by_name = true)"
-            )
-        else:
-            source = f"(SELECT *, NULL::DATE AS {PARTITION_COLUMN} FROM _empty_events)"  # noqa: S608
-        # Only constants and the store's own path are interpolated here, never event content.
-        self._con.execute(f"CREATE OR REPLACE TEMP VIEW events AS SELECT * FROM {source}")  # noqa: S608
+    def _refresh_views(self) -> None:
+        for table in TABLES:
+            directory = self.root / table
+            if any(directory.glob(f"{PARTITION_COLUMN}=*/*.parquet")):
+                pattern = str(directory / "*" / "*.parquet").replace("'", "''")
+                source = (
+                    f"read_parquet('{pattern}', hive_partitioning = true, "
+                    f"hive_types = {{'{PARTITION_COLUMN}': DATE}}, union_by_name = true)"
+                )
+            else:
+                source = f"(SELECT *, NULL::DATE AS {PARTITION_COLUMN} FROM _empty_{table})"  # noqa: S608
+            # Only constants and the store's own path are interpolated, never stored content.
+            self._con.execute(f"CREATE OR REPLACE TEMP VIEW {table} AS SELECT * FROM {source}")  # noqa: S608
 
     def query(self, sql: str, params: Sequence[Any] | None = None) -> list[dict[str, Any]]:
-        """Run one read-only ``SELECT`` against the ``events`` view.
+        """Run one read-only ``SELECT`` against the ``events`` and ``alerts`` views.
 
         Values must go through ``params``; the statement text is never built
         from event content.
@@ -154,7 +194,7 @@ class EventStore:
         statements = duckdb.extract_statements(sql)
         if len(statements) != 1 or statements[0].type != duckdb.StatementType.SELECT:
             raise QueryError("only a single SELECT statement is allowed")
-        self._refresh_view()
+        self._refresh_views()
         result: list[dict[str, Any]] = (
             self._con.sql(sql, params=list(params or [])).to_arrow_table().to_pylist()
         )
