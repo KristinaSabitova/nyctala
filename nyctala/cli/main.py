@@ -2,18 +2,24 @@
 
 import json
 import os
+import re
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 
 from nyctala.ingest.sensors import SensorError, SensorRegistry
+
+if TYPE_CHECKING:
+    from nyctala.schema import Alert
 
 app = typer.Typer(no_args_is_help=True, help="Lightweight detection-engineering SIEM.")
 sensor_app = typer.Typer(no_args_is_help=True, help="Manage sensors and their ingest tokens.")
 app.add_typer(sensor_app, name="sensor")
 rules_app = typer.Typer(no_args_is_help=True, help="Detection rules.")
 app.add_typer(rules_app, name="rules")
+alerts_app = typer.Typer(no_args_is_help=True, help="Alerts and their explanation.")
+app.add_typer(alerts_app, name="alerts")
 
 DataDir = Annotated[
     Path,
@@ -117,9 +123,10 @@ def detect(
     interval: Annotated[float, typer.Option(help="Seconds between runs.", min=1)] = 10.0,
     once: Annotated[bool, typer.Option("--once", help="Run a single pass and exit.")] = False,
 ) -> None:
-    """Run the detection job and print new hits as NDJSON."""
+    """Run the detection job: store alerts and print each new one."""
     import threading
 
+    from nyctala.engine.alerts import AlertManager
     from nyctala.engine.correlation import Hit
     from nyctala.engine.job import DetectionJob
     from nyctala.engine.ruleset import load_ruleset
@@ -129,23 +136,14 @@ def detect(
     ruleset = load_ruleset(rules_dir or RULES_DIR)
     for path, error in ruleset.errors.items():
         typer.echo(f"skipping {path.name}: {error}", err=True)
+    store = EventStore(data)
+    manager = AlertManager(store, ruleset)
 
     def emit(hits: list[Hit]) -> None:
-        for hit in hits:
-            rule = ruleset.rules[hit.rule_id]
-            record = {
-                "rule.id": rule.id,
-                "rule.title": rule.title,
-                "rule.level": rule.level,
-                "techniques": list(rule.techniques),
-                "first": hit.first.isoformat(),
-                "last": hit.last.isoformat(),
-                "group": hit.fields,
-                "event_ids": list(hit.event_ids),
-            }
-            typer.echo(json.dumps(record, default=str))
+        for alert in manager.handle(hits):
+            typer.echo(_alert_line(alert))
 
-    job = DetectionJob(EventStore(data), ruleset, emit, interval=interval)
+    job = DetectionJob(store, ruleset, emit, interval=interval)
     if once:
         job.run_once()
         return
@@ -154,6 +152,109 @@ def detect(
         job.run_forever(stop)
     except KeyboardInterrupt:
         stop.set()
+
+
+def _alert_line(alert: "Alert") -> str:
+    techniques = ",".join(alert.techniques) or "-"
+    return (
+        f"{alert.last:%Y-%m-%d %H:%M:%S}  {alert.rule_level:<8} risk={alert.risk_accumulated:<4} "
+        f"{techniques:<20} {alert.rule_title}  [{alert.alert_id[:8]}]"
+    )
+
+
+Since = Annotated[float, typer.Option("--since", help="Look back this many hours.", min=0)]
+
+
+@alerts_app.command("list")
+def alerts_list(
+    data: DataDir = Path("data"),
+    since: Since = 24,
+    as_json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """List recent alerts, newest last."""
+    from datetime import UTC, datetime, timedelta
+
+    from nyctala.engine.alerts import load_alerts
+    from nyctala.store import EventStore
+
+    now = datetime.now(UTC)
+    for alert in load_alerts(EventStore(data), now - timedelta(hours=since), now):
+        if as_json:
+            typer.echo(json.dumps(alert.model_dump(mode="json", by_alias=True)))
+        else:
+            typer.echo(_alert_line(alert))
+
+
+@alerts_app.command("show")
+def alerts_show(alert_id: str, data: DataDir = Path("data")) -> None:
+    """Explain one alert: rule, techniques, risk, entities and the events behind it."""
+    from datetime import UTC
+
+    from nyctala.schema import Alert
+    from nyctala.store import EventStore
+
+    store = EventStore(data)
+    if not re.fullmatch(r"[0-9a-f-]{4,36}", alert_id):
+        raise typer.BadParameter("expected an alert id (or its prefix)")
+    rows = store.query(
+        'SELECT * EXCLUDE (dt) FROM alerts WHERE starts_with("alert.id", ?)', [alert_id]
+    )
+    if len(rows) != 1:
+        raise typer.BadParameter(f"{len(rows)} alerts match {alert_id!r}")
+    alert = Alert.model_validate(rows[0])
+    typer.echo(f"{alert.rule_title}  ({alert.kind}, {alert.rule_level})")
+    typer.echo(f"  alert      {alert.alert_id}")
+    typer.echo(f"  rule       {alert.rule_name or '-'}  {alert.rule_id}")
+    typer.echo(f"  ATT&CK     {', '.join(alert.techniques) or '-'}")
+    typer.echo(f"  window     {alert.first:%Y-%m-%d %H:%M:%S} -> {alert.last:%H:%M:%S} UTC")
+    typer.echo(f"  entities   {', '.join(alert.entities) or '-'}")
+    typer.echo(f"  risk       +{alert.risk_score}, accumulated {alert.risk_accumulated}")
+    typer.echo(f"  why        {alert.explanation}")
+    if alert.related_alert_ids:
+        typer.echo(f"  alerts     {', '.join(a[:8] for a in alert.related_alert_ids)}")
+    events = store.query(
+        'SELECT "@timestamp" AS ts, "event.dataset" AS ds, "sensor.id" AS sensor, '
+        '"event.original" AS original FROM events WHERE list_contains(?, "event.id") '
+        'ORDER BY "@timestamp"',
+        [alert.event_ids],
+    )
+    typer.echo(f"  events     {len(events)}")
+    for e in events:
+        # Stored text is already neutralised: no control characters reach the terminal.
+        ts = e["ts"].astimezone(UTC)
+        typer.echo(f"    {ts:%H:%M:%S} {e['sensor']}/{e['ds']}  {e['original']}")
+
+
+@app.command("incidents")
+def incidents_list(data: DataDir = Path("data"), since: Since = 72) -> None:
+    """Group recent alerts into incidents by shared user, IP or host."""
+    from datetime import UTC, datetime, timedelta
+
+    from nyctala.engine.alerts import incidents
+    from nyctala.store import EventStore
+
+    now = datetime.now(UTC)
+    for inc in incidents(EventStore(data), now - timedelta(hours=since), now):
+        typer.echo(
+            f"incident {inc.id[:8]}  {inc.level:<8} risk={inc.risk:<4} alerts={len(inc.alerts):<3} "
+            f"{inc.first:%Y-%m-%d %H:%M} -> {inc.last:%H:%M}"
+        )
+        typer.echo(f"  ATT&CK    {', '.join(inc.techniques) or '-'}")
+        typer.echo(f"  entities  {', '.join(inc.entities) or '-'}")
+        for alert in inc.alerts:
+            typer.echo(f"    {_alert_line(alert)}")
+
+
+@app.command("risk")
+def risk_list(data: DataDir = Path("data"), since: Since = 24) -> None:
+    """Accumulated risk per entity (user, host, IP)."""
+    from datetime import UTC, datetime, timedelta
+
+    from nyctala.engine.alerts import entity_risk
+    from nyctala.store import EventStore
+
+    for r in entity_risk(EventStore(data), datetime.now(UTC), timedelta(hours=since)):
+        typer.echo(f"{r.score:>5}  {r.entity:<40} alerts={r.alerts} rules={r.rules}")
 
 
 @app.command()
