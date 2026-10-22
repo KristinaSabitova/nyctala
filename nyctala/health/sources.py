@@ -3,7 +3,8 @@
 A source is a (sensor, dataset) pair seen in the last ``history``. It is
 *silent* when nothing arrived for ``silence``: an agent stopped, a log file
 rotated away, or someone switched logging off (ATT&CK T1685). A registered
-sensor that has never sent anything is reported as ``never_seen``.
+sensor that has never sent anything is ``never_seen``, or ``waiting`` while it
+was registered less than ``silence`` ago.
 
 Lag is ``event.ingested - @timestamp``. Events stamped well in the future
 (beyond ``skew``) point at a wrong clock or forged timestamps.
@@ -41,7 +42,7 @@ class HealthPolicy:
 class SourceStatus:
     sensor: str
     dataset: str | None
-    status: str  # ok | silent | never_seen
+    status: str  # ok | waiting | silent | never_seen
     last_ingested: datetime | None = None
     last_event: datetime | None = None
     events: int = 0
@@ -69,9 +70,16 @@ class SourceStatus:
 
 
 def source_health(
-    store: EventStore, sensors: list[str], now: datetime, policy: HealthPolicy | None = None
+    store: EventStore,
+    sensors: list[str],
+    now: datetime,
+    policy: HealthPolicy | None = None,
+    registered: dict[str, datetime] | None = None,
 ) -> list[SourceStatus]:
-    """Status of every source of the given (active) sensors."""
+    """Status of every source of the given (active) sensors.
+
+    ``registered``: when each sensor was added, to give new sensors time to start.
+    """
     policy = policy or HealthPolicy()
     window_start = now - policy.window
     rows = store.query(
@@ -126,14 +134,13 @@ def source_health(
         last = store.query(
             'SELECT max("event.ingested") AS t FROM events WHERE "sensor.id" = ?', [sensor]
         )[0]["t"]
-        statuses.append(
-            SourceStatus(
-                sensor,
-                None,
-                "never_seen" if last is None else "silent",
-                last.astimezone(UTC) if last else None,
-            )
-        )
+        if last is not None:
+            status = "silent"
+        elif registered and sensor in registered and now - registered[sensor] < policy.silence:
+            status = "waiting"
+        else:
+            status = "never_seen"
+        statuses.append(SourceStatus(sensor, None, status, last.astimezone(UTC) if last else None))
     return statuses
 
 
@@ -152,7 +159,7 @@ def silent_alerts(
     """One alert per silence episode of each source."""
     alerts = []
     for s in statuses:
-        if s.status == "ok":
+        if s.status in ("ok", "waiting"):
             continue
         source = f"{s.sensor}/{s.dataset or '*'}"
         group = group_key({"sensor": s.sensor, "dataset": s.dataset or "*"})

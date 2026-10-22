@@ -296,8 +296,9 @@ def health(
 
     store = EventStore(data)
     now = datetime.now(UTC)
-    sensors = HealthMonitor(store, _registry(data)).active_sensors()
-    statuses = source_health(store, sensors, now, HealthPolicy(silence=timedelta(minutes=silence)))
+    registered = HealthMonitor(store, _registry(data)).registered()
+    policy = HealthPolicy(silence=timedelta(minutes=silence))
+    statuses = source_health(store, sorted(registered), now, policy, registered)
     if as_json:
         for st in statuses:
             typer.echo(json.dumps(st.to_record(now), default=str))
@@ -309,7 +310,7 @@ def health(
                 f"{st.status:<10} {st.sensor + '/' + (st.dataset or '*'):<28} last={last}  "
                 f"events(1h)={st.events:<6} lag {lag}  future={st.future} unparsed={st.unparsed}"
             )
-    if any(st.status != "ok" or st.future for st in statuses):
+    if any(st.status not in ("ok", "waiting") or st.future for st in statuses):
         raise typer.Exit(1)
 
 

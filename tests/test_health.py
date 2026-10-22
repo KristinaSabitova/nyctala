@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -49,6 +50,13 @@ class Env:
         ]
         self.chain.append(sensor, events)
 
+    def backdate(self) -> None:
+        """Pretend every sensor was registered long ago (past the grace period)."""
+        data = json.loads(self.registry.path.read_text())
+        for info in data["sensors"].values():
+            info["created"] = "2026-10-01T00:00:00+00:00"
+        self.registry.path.write_text(json.dumps(data))
+
     def monitor(self, **kw: Any) -> HealthMonitor:
         return HealthMonitor(self.store, self.registry, self.alerts.extend, **kw)
 
@@ -62,6 +70,7 @@ def env(tmp_path: Path) -> Env:
     e = Env(tmp_path)
     for sensor in ("vps-a", "vps-b", "vps-c"):
         e.registry.add(sensor)
+    e.backdate()
     return e
 
 
@@ -89,6 +98,24 @@ def test_one_dataset_going_silent_is_noticed(env: Env) -> None:
 def test_silent_for_more_than_history(env: Env) -> None:
     env.send("vps-b", timedelta(days=3))
     assert env.status()["vps-b/*"] == "silent"
+
+
+def test_new_sensor_gets_a_grace_period(env: Env) -> None:
+    created = {"vps-c": NOW - timedelta(minutes=2)}
+    (st,) = source_health(env.store, ["vps-c"], NOW, HealthPolicy(), created)
+    assert st.status == "waiting"
+    created = {"vps-c": NOW - timedelta(minutes=20)}
+    (st,) = source_health(env.store, ["vps-c"], NOW, HealthPolicy(), created)
+    assert st.status == "never_seen"
+
+
+def test_monitor_does_not_alert_on_brand_new_sensor(env: Env) -> None:
+    env.registry.revoke("vps-a")
+    env.registry.revoke("vps-b")
+    env.registry.revoke("vps-c")
+    env.registry.add("vps-new")
+    env.monitor().tick(datetime.now(UTC))
+    assert env.alerts == []
 
 
 def test_revoked_sensor_not_monitored(env: Env) -> None:
@@ -162,6 +189,7 @@ def test_never_seen_sensor_alerts(env: Env) -> None:
     env.registry.revoke("vps-b")
     env.registry.revoke("vps-c")
     env.registry.add("vps-new")
+    env.backdate()
     env.monitor().tick(NOW)
     (alert,) = [a for a in env.alerts if "vps-new" in a.rule_title]
     assert "has never sent any event" in alert.explanation
@@ -218,6 +246,8 @@ def test_cli_health_exit_codes(env: Env) -> None:
     assert ok.exit_code == 0, ok.output
     assert ok.output.startswith("ok")
     env.registry.add("vps-d")
+    assert runner.invoke(app, ["health", *data]).exit_code == 0  # still in its grace period
+    env.backdate()
     bad = runner.invoke(app, ["health", *data])
     assert bad.exit_code == 1
     assert "never_seen" in bad.output

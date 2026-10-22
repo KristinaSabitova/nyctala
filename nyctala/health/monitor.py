@@ -30,13 +30,22 @@ class HealthMonitor:
     _last_verify: datetime | None = None
 
     def active_sensors(self) -> list[str]:
-        return sorted(s for s, info in self.registry.list().items() if not info.get("revoked"))
+        return sorted(self.registered())
+
+    def registered(self) -> dict[str, datetime]:
+        """Active sensors and when they were added."""
+        return {
+            sensor: datetime.fromisoformat(info["created"])
+            for sensor, info in self.registry.list().items()
+            if not info.get("revoked")
+        }
 
     def tick(self, now: datetime) -> list[Alert]:
         alerts: list[Alert] = []
         if self._last_check is None or now - self._last_check >= self.interval:
             self._last_check = now
-            statuses = source_health(self.store, self.active_sensors(), now, self.policy)
+            registered = self.registered()
+            statuses = source_health(self.store, sorted(registered), now, self.policy, registered)
             self.store.append_records("source_health", now, [s.to_record(now) for s in statuses])
             alerts += silent_alerts(self.store, statuses, now, self.policy)
         if self._last_verify is None or now - self._last_verify >= self.verify_interval:
