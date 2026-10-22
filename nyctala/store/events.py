@@ -10,6 +10,7 @@ of fake dates to explode the number of partitions, and late events land in the
 current partition instead of rewriting old ones.
 """
 
+import ipaddress
 import os
 import uuid
 from collections import defaultdict
@@ -18,6 +19,8 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
+import duckdb.func
+import duckdb.sqltypes as dt
 import pyarrow as pa
 import pyarrow.parquet as pq
 
@@ -59,6 +62,21 @@ EVENT_SCHEMA = pa.schema(
 PARTITION_COLUMN = "dt"
 
 
+def _in_network(ip: str | None, network: str | None) -> bool | None:
+    if ip is None or network is None:
+        return None
+    try:
+        return ipaddress.ip_address(ip) in ipaddress.ip_network(network, strict=False)
+    except ValueError:
+        return False
+
+
+def cidr_match(ips: pa.Array, networks: pa.Array) -> pa.Array:
+    """SQL function ``nyctala_cidr_match(ip, cidr)``; the inet extension is not loadable here."""
+    pairs = zip(ips.to_pylist(), networks.to_pylist(), strict=True)
+    return pa.array([_in_network(ip, net) for ip, net in pairs], pa.bool_())
+
+
 class QueryError(ValueError):
     """The SQL handed to :meth:`EventStore.query` is not allowed."""
 
@@ -87,6 +105,13 @@ class EventStore:
         con.execute("SET enable_external_access = false")
         con.execute("SET lock_configuration = true")
         con.register("_empty_events", EVENT_SCHEMA.empty_table())
+        con.create_function(
+            "nyctala_cidr_match",
+            cidr_match,
+            [dt.VARCHAR, dt.VARCHAR],
+            dt.BOOLEAN,
+            type=duckdb.func.ARROW,
+        )
         return con
 
     def append(self, events: Iterable[Event]) -> int:
